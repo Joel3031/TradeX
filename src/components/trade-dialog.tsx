@@ -263,7 +263,7 @@ function TradeForm({ setOpen, className, initialData }: { setOpen: (open: boolea
                 />
             </div>
             <div className="w-full grid gap-2">
-                <Label htmlFor="exitPrice">Exit Price (Optional)</Label>
+                <Label htmlFor="exitPrice">Exit Price</Label>
                 <Input
                     id="exitPrice"
                     name="exitPrice"

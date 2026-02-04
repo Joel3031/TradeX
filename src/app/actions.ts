@@ -1,41 +1,64 @@
 "use server"
 
+import crypto from "crypto"
+import { auth } from "@/auth"
+import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/db"
 import { revalidatePath } from "next/cache"
-import { auth } from "@/auth"
-import bcrypt from "bcryptjs" // <--- CRITICAL IMPORT
+import { sendOtpEmail } from "@/lib/email" // Import your email helper
 
-// --- 1. USER REGISTRATION ACTION (Fixes your error) ---
+// 1. REGISTER USER (Generate OTP & Send)
 export async function registerUser(data: any) {
     try {
-        // Validate input
         if (!data.email || !data.password || !data.name) {
             return { success: false, error: "Missing required fields" }
         }
 
-        // Check for existing user
         const existingUser = await prisma.user.findUnique({
             where: { email: data.email }
         })
 
-        if (existingUser) {
+        // If user exists AND is verified, stop them.
+        if (existingUser && existingUser.isVerified) {
             return { success: false, error: "Email already in use" }
         }
 
-        // Hash password
+        // Generate 6-digit OTP
+        const otp = crypto.randomInt(100000, 999999).toString();
+        const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
+
         const hashedPassword = await bcrypt.hash(data.password, 10)
 
-        // Create User
-        await prisma.user.create({
-            data: {
-                name: data.name,
-                email: data.email,
-                phoneNumber: data.phone, // Ensure 'phoneNumber' exists in your Prisma Schema!
-                password: hashedPassword,
-            }
-        })
+        // Upsert: If user exists (unverified), update them. If not, create new.
+        if (existingUser && !existingUser.isVerified) {
+            await prisma.user.update({
+                where: { email: data.email },
+                data: {
+                    name: data.name,
+                    password: hashedPassword,
+                    phoneNumber: data.phone,
+                    otp,
+                    otpExpiry
+                }
+            })
+        } else {
+            await prisma.user.create({
+                data: {
+                    name: data.name,
+                    email: data.email,
+                    phoneNumber: data.phone,
+                    password: hashedPassword,
+                    otp,
+                    otpExpiry,
+                    isVerified: false
+                }
+            })
+        }
 
-        return { success: true }
+        // Send Email (Non-blocking: don't await if you want faster UI)
+        await sendOtpEmail(data.email, otp);
+
+        return { success: true, message: "OTP sent to email" }
 
     } catch (error) {
         console.error("Registration Error:", error)
@@ -43,53 +66,107 @@ export async function registerUser(data: any) {
     }
 }
 
-// --- 2. EXISTING TRADE ACTIONS ---
+// 2. VERIFY OTP ACTION
+export async function verifyOtp(email: string, otp: string) {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { email }
+        })
+
+        if (!user) {
+            return { success: false, error: "User not found" }
+        }
+
+        if (user.otp !== otp) {
+            return { success: false, error: "Invalid OTP" }
+        }
+
+        if (!user.otpExpiry || new Date() > user.otpExpiry) {
+            return { success: false, error: "OTP Expired" }
+        }
+
+        // Verify User
+        await prisma.user.update({
+            where: { email },
+            data: {
+                isVerified: true,
+                otp: null, // Clear OTP
+                otpExpiry: null
+            }
+        })
+
+        return { success: true }
+
+    } catch (error) {
+        return { success: false, error: "Verification failed" }
+    }
+}
+
+// --- 2. TRADE ACTIONS ---
 
 export async function createTrade(formData: any) {
     const session = await auth()
 
-    if (!session || !session.user || !session.user.id) {
-        throw new Error("Unauthorized: Please sign in")
+    // FIX 1: Strict check ensures 'userId' is available and is a string
+    if (!session?.user?.id) {
+        return { success: false, error: "Unauthorized: No User ID found" }
     }
 
     const userId = session.user.id
 
     try {
+        // FIX 2: Default to 0 if empty (fixes "Type null is not assignable" error)
+        const stopLossValue = formData.stopLoss && formData.stopLoss.toString().trim() !== ""
+            ? parseFloat(formData.stopLoss)
+            : 0;
+
+        // Ensure proper number parsing
+        const entryPriceValue = parseFloat(formData.entryPrice);
+        const exitPriceValue = parseFloat(formData.exitPrice);
+        const quantityValue = parseInt(formData.quantity);
+
+        // Calculate PnL
+        let pnl = null;
+        if (formData.exitPrice) {
+            if (formData.type === "BUY") {
+                pnl = (exitPriceValue - entryPriceValue) * quantityValue;
+            } else {
+                pnl = (entryPriceValue - exitPriceValue) * quantityValue;
+            }
+        }
+
         await prisma.trade.create({
             data: {
-                userId: userId,
+                userId: userId, // Now guaranteed to be a string
                 symbol: formData.symbol.toUpperCase(),
                 type: formData.type,
-                entryPrice: formData.entryPrice,
-                exitPrice: formData.exitPrice || null,
-                quantity: parseInt(formData.quantity),
-                stopLoss: formData.stopLoss,
+                entryPrice: entryPriceValue,
+                exitPrice: exitPriceValue,
+                quantity: quantityValue,
+                stopLoss: stopLossValue,
                 entryDate: new Date(formData.date),
-                status: formData.exitPrice ? "CLOSED" : "OPEN",
-                pnl: formData.exitPrice
-                    ? (formData.type === "BUY"
-                        ? (parseFloat(formData.exitPrice) - parseFloat(formData.entryPrice)) * parseInt(formData.quantity)
-                        : (parseFloat(formData.entryPrice) - parseFloat(formData.exitPrice)) * parseInt(formData.quantity)
-                    )
-                    : null
-            }
+                pnl: pnl,
+                status: "CLOSED"
+            },
         })
 
         revalidatePath("/")
         return { success: true }
-
     } catch (error) {
-        console.error("Failed to save trade:", error)
-        return { success: false, error: "Failed to save to database" }
+        console.error("Create error:", error)
+        return { success: false, error: "Failed to create trade" }
     }
 }
 
 export async function updateTrade(data: any) {
     const session = await auth()
-    if (!session?.user) return { success: false, error: "Unauthorized" }
+
+    // FIX 1: Strict check
+    if (!session?.user?.id) {
+        return { success: false, error: "Unauthorized" }
+    }
 
     try {
-        // Validate that the trade belongs to the user before updating
         const existingTrade = await prisma.trade.findUnique({
             where: { id: data.id },
         })
@@ -98,22 +175,36 @@ export async function updateTrade(data: any) {
             return { success: false, error: "Trade not found or unauthorized" }
         }
 
+        // FIX 2: Default to 0 if empty
+        const stopLossValue = data.stopLoss && data.stopLoss.toString().trim() !== ""
+            ? parseFloat(data.stopLoss)
+            : 0;
+
+        const entryPriceValue = parseFloat(data.entryPrice);
+        const exitPriceValue = parseFloat(data.exitPrice);
+        const quantityValue = parseInt(data.quantity);
+
+        // Calculate PnL
+        let pnl = null;
+        if (data.exitPrice) {
+            if (data.type === "BUY") {
+                pnl = (exitPriceValue - entryPriceValue) * quantityValue;
+            } else {
+                pnl = (entryPriceValue - exitPriceValue) * quantityValue;
+            }
+        }
+
         await prisma.trade.update({
             where: { id: data.id },
             data: {
                 symbol: data.symbol.toUpperCase(),
                 type: data.type,
-                entryPrice: parseFloat(data.entryPrice),
-                exitPrice: data.exitPrice ? parseFloat(data.exitPrice) : null,
-                quantity: parseInt(data.quantity),
-                stopLoss: parseFloat(data.stopLoss),
-                entryDate: new Date(data.date), // Ensure field name matches your DB (date vs entryDate)
-                // Calculate PnL if exit price exists
-                pnl: data.exitPrice
-                    ? (data.type === "BUY"
-                        ? (parseFloat(data.exitPrice) - parseFloat(data.entryPrice)) * parseInt(data.quantity)
-                        : (parseFloat(data.entryPrice) - parseFloat(data.exitPrice)) * parseInt(data.quantity))
-                    : null
+                entryPrice: entryPriceValue,
+                exitPrice: exitPriceValue,
+                quantity: quantityValue,
+                stopLoss: stopLossValue,
+                entryDate: new Date(data.date),
+                pnl: pnl,
             },
         })
 
@@ -125,10 +216,12 @@ export async function updateTrade(data: any) {
     }
 }
 
-// 2. DELETE ACTION
 export async function deleteTrade(tradeId: string) {
     const session = await auth()
-    if (!session?.user) return { success: false, error: "Unauthorized" }
+    // FIX 1: Strict check
+    if (!session?.user?.id) {
+        return { success: false, error: "Unauthorized" }
+    }
 
     try {
         const existingTrade = await prisma.trade.findUnique({

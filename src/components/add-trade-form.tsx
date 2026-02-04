@@ -42,13 +42,37 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        // --- MANUAL VALIDATION START ---
+        // This replaces the HTML 'required' attribute so we can show custom toasts
+
+        if (!formData.symbol) {
+            toast.warning("Please enter a Symbol (e.g., NIFTY)")
+            return
+        }
+
+        if (!formData.entryPrice || !formData.exitPrice) {
+            toast.warning("Entry Price and Exit Price are mandatory.")
+            return
+        }
+
+        if (!formData.quantity) {
+            toast.warning("Please enter the Quantity.")
+            return
+        }
+
+        if (!formData.date) {
+            toast.warning("Please select a Date.")
+            return
+        }
+        // --- MANUAL VALIDATION END ---
+
         setLoading(true)
 
         try {
             let result;
 
             if (initialData?.id) {
-                // FIX: Combine ID and formData into a single object
                 result = await updateTrade({ ...formData, id: initialData.id })
             } else {
                 result = await createTrade(formData)
@@ -56,11 +80,9 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
 
             if (result.success) {
                 toast.success(initialData ? "Trade Updated" : "Trade Logged Successfully")
-                // Close dialog / refresh list
                 if (onSuccess) {
                     onSuccess()
                 } else {
-                    // Reset form only if not closing (though usually you close on success)
                     setFormData({
                         symbol: "", type: "BUY", entryPrice: "", exitPrice: "",
                         quantity: "", stopLoss: "", date: new Date().toISOString().split('T')[0]
@@ -81,60 +103,113 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
         setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
     }
 
-    return (
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+    const labelClasses = "text-xs font-medium uppercase text-zinc-500 tracking-wider ml-1"
+    const inputClasses = "w-full h-12 bg-white dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 focus:border-green-500 focus:ring-green-500/20 rounded-xl transition-all"
 
-            {/* 1. SYMBOL (Full Width) */}
+    return (
+        <form onSubmit={handleSubmit} className="space-y-5 py-4">
+
+            {/* 1. SYMBOL */}
             <div className="space-y-2">
-                <Label>Symbol</Label>
-                <Input name="symbol" value={formData.symbol} onChange={handleChange} required className="uppercase" placeholder="NIFTY" />
+                <Label className={labelClasses}>Symbol</Label>
+                <Input
+                    name="symbol"
+                    value={formData.symbol}
+                    onChange={handleChange}
+                    // REMOVED 'required' to prevent browser tooltip
+                    className={`${inputClasses} uppercase font-semibold`}
+                    placeholder="e.g. NIFTY"
+                />
             </div>
 
-            {/* 2. TYPE (Full Width) */}
+            {/* 2. TYPE */}
             <div className="space-y-2">
-                <Label>Type</Label>
+                <Label className={labelClasses}>Type</Label>
                 <Select value={formData.type} onValueChange={(val: any) => setFormData(prev => ({ ...prev, type: val }))}>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className={inputClasses}>
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="BUY">BUY</SelectItem>
-                        <SelectItem value="SELL">SELL</SelectItem>
+                        <SelectItem value="BUY" className="text-green-500 font-medium">BUY (Long)</SelectItem>
+                        <SelectItem value="SELL" className="text-red-500 font-medium">SELL (Short)</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
 
-            {/* 3. ENTRY PRICE & EXIT PRICE (Side-by-Side) */}
+            {/* 3. ENTRY & EXIT */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                    <Label>Entry Price</Label>
-                    <Input type="number" step="0.05" name="entryPrice" value={formData.entryPrice} onChange={handleChange} required />
+                    <Label className={labelClasses}>Entry Price</Label>
+                    <Input
+                        type="number"
+                        step="0.05"
+                        name="entryPrice"
+                        value={formData.entryPrice}
+                        onChange={handleChange}
+                        placeholder="0.00"
+                        className={inputClasses}
+                    />
                 </div>
                 <div className="space-y-2">
-                    <Label>Exit Price</Label> {/* Removed (Optional) */}
-                    <Input type="number" step="0.05" name="exitPrice" value={formData.exitPrice} onChange={handleChange} placeholder="Target?" />
+                    <Label className={labelClasses}>Exit Price</Label>
+                    <Input
+                        type="number"
+                        step="0.05"
+                        name="exitPrice"
+                        value={formData.exitPrice}
+                        onChange={handleChange}
+                        placeholder="Target"
+                        className={inputClasses}
+                    />
                 </div>
             </div>
 
-            {/* 4. QUANTITY & STOP LOSS (Side-by-Side) */}
+            {/* 4. QUANTITY & STOP LOSS */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                    <Label>Quantity</Label>
-                    <Input type="number" name="quantity" value={formData.quantity} onChange={handleChange} required />
+                    <Label className={labelClasses}>Quantity</Label>
+                    <Input
+                        type="number"
+                        name="quantity"
+                        value={formData.quantity}
+                        onChange={handleChange}
+                        // REMOVED 'required'
+                        className={inputClasses}
+                        placeholder="Qty"
+                    />
                 </div>
                 <div className="space-y-2">
-                    <Label>Stop Loss</Label>
-                    <Input type="number" step="0.05" name="stopLoss" value={formData.stopLoss} onChange={handleChange} required />
+                    <Label className={labelClasses}>Stop Loss</Label>
+                    <Input
+                        type="number"
+                        step="0.05"
+                        name="stopLoss"
+                        value={formData.stopLoss}
+                        onChange={handleChange}
+                        className={inputClasses}
+                        placeholder="Optional"
+                    />
                 </div>
             </div>
 
-            {/* 5. DATE (Full Width) */}
+            {/* 5. DATE */}
             <div className="space-y-2">
-                <Label>Date</Label>
-                <Input type="date" name="date" value={formData.date} onChange={handleChange} required />
+                <Label className={labelClasses}>Date</Label>
+                <Input
+                    type="date"
+                    name="date"
+                    value={formData.date}
+                    onChange={handleChange}
+                    // REMOVED 'required'
+                    className={inputClasses}
+                />
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button
+                type="submit"
+                disabled={loading}
+                className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl text-base shadow-lg shadow-green-900/20 transition-all hover:scale-[1.02] active:scale-[0.98] mt-2"
+            >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {initialData ? "Update Trade" : "Save Trade"}
             </Button>

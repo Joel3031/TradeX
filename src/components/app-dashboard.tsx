@@ -4,12 +4,14 @@ import Link from "next/link"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { TradeHistory } from "@/components/trade-history"
-import { LayoutDashboard, List, Plus, LineChart, Calendar as CalendarIcon, Newspaper, ArrowUp } from "lucide-react"
-import { DashboardOverview } from "@/components/dashboard-overview"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { MarketNews } from "@/components/dashboard/market-news"
 import { EquityChart } from "@/components/dashboard/equity-chart"
 import { PnlCalendar } from "@/components/dashboard/pnl-calendar"
-import { MarketNews } from "@/components/dashboard/market-news"
+import { DashboardOverview } from "@/components/dashboard-overview"
+// 1. IMPORT THE DOWNLOADER COMPONENT
+import { ReportDownloader } from "@/components/dashboard/report-downloader"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { LayoutDashboard, List, Plus, LineChart, Calendar as CalendarIcon, Newspaper, ArrowUp } from "lucide-react"
 
 interface AppDashboardProps {
     trades: any[]
@@ -47,20 +49,27 @@ export function AppDashboard({ trades }: AppDashboardProps) {
                                 Track your performance and analyze your edge.
                             </p>
                         </div>
-                        <TabsList>
-                            <TabsTrigger value="overview" className="flex items-center gap-2">
-                                <LayoutDashboard className="h-4 w-4" />
-                                Overview
-                            </TabsTrigger>
-                            <TabsTrigger value="analytics" className="flex items-center gap-2">
-                                <LineChart className="h-4 w-4" />
-                                Analytics
-                            </TabsTrigger>
-                            <TabsTrigger value="news" className="flex items-center gap-2">
-                                <Newspaper className="h-4 w-4" />
-                                News
-                            </TabsTrigger>
-                        </TabsList>
+
+                        {/* 2. UPDATED HEADER ACTIONS */}
+                        <div className="flex items-center gap-3">
+                            {/* Export Button added here */}
+                            <ReportDownloader trades={trades} />
+
+                            <TabsList>
+                                <TabsTrigger value="overview" className="flex items-center gap-2">
+                                    <LayoutDashboard className="h-4 w-4" />
+                                    Overview
+                                </TabsTrigger>
+                                <TabsTrigger value="analytics" className="flex items-center gap-2">
+                                    <LineChart className="h-4 w-4" />
+                                    Analytics
+                                </TabsTrigger>
+                                <TabsTrigger value="news" className="flex items-center gap-2">
+                                    <Newspaper className="h-4 w-4" />
+                                    News
+                                </TabsTrigger>
+                            </TabsList>
+                        </div>
                     </div>
 
                     <TabsContent value="overview" className="space-y-6 animate-in fade-in-50 duration-500">
@@ -120,13 +129,17 @@ export function AppDashboard({ trades }: AppDashboardProps) {
                 </Tabs>
             </div>
 
-            {/* MOBILE VIEW (Unchanged) */}
+            {/* MOBILE VIEW */}
             <div className="md:hidden space-y-6">
                 {activeTab === "home" && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8">
-                        <div>
-                            <h2 className="text-2xl font-bold tracking-tight">Overview</h2>
-                            <p className="text-sm text-muted-foreground">Market Snapshot</p>
+                        <div className="flex items-start justify-between">
+                            <div>
+                                <h2 className="text-2xl font-bold tracking-tight">Overview</h2>
+                                <p className="text-sm text-muted-foreground">Market Snapshot</p>
+                            </div>
+                            {/* Optional: Add Export to Mobile Header too */}
+                            <ReportDownloader trades={trades} />
                         </div>
                         <DashboardOverview trades={trades} />
                         <div className="pt-2">
@@ -134,7 +147,9 @@ export function AppDashboard({ trades }: AppDashboardProps) {
                         </div>
                     </div>
                 )}
+
                 {/* ... (Rest of Mobile Tabs remain the same) ... */}
+
                 {activeTab === "analytics" && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
                         <EquityChart trades={trades} />

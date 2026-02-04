@@ -62,7 +62,7 @@ export default function LoginPage() {
 
                 <div className="relative z-10 flex items-center gap-3 font-bold text-2xl tracking-tight">
                     <Image
-                        src="/TradeX.svg"
+                        src="/TradeX-logo.svg"
                         alt="TradeX Logo"
                         width={40}
                         height={40}

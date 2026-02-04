@@ -49,6 +49,10 @@ model User {
   
   accounts      Account[]
   sessions      Session[]
+
+  isVerified Boolean   @default(false)
+  otp        String?
+  otpExpiry  DateTime?
   
   // App Relations
   trades        Trade[]
@@ -64,7 +68,7 @@ model Trade {
   entryPrice Decimal
   exitPrice  Decimal?
   quantity   Int
-  stopLoss   Decimal
+  stopLoss    Decimal?  @db.Decimal(10, 2)
   entryDate  DateTime
   status     String   // "OPEN" or "CLOSED"
   pnl        Decimal?
