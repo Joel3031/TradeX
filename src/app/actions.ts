@@ -158,6 +158,62 @@ export async function createTrade(formData: any) {
     }
 }
 
+export async function importTrades(tradesData: any[]) {
+    const session = await auth()
+
+    // 1. Strict Check & Capture ID
+    if (!session?.user?.id) {
+        return { success: false, error: "Unauthorized" }
+    }
+
+    // Assign to a const variable so TypeScript knows it won't change
+    const userId = session.user.id
+
+    try {
+        // 2. Map data using the captured 'userId'
+        const formattedTrades = tradesData.map((t) => {
+            const entryPrice = parseFloat(t.entryPrice)
+            const exitPrice = t.exitPrice ? parseFloat(t.exitPrice) : null
+            const quantity = parseInt(t.quantity)
+            const type = t.type.toUpperCase()
+
+            // Calculate PnL safely
+            let pnl = null
+            if (exitPrice) {
+                pnl = type === "BUY"
+                    ? (exitPrice - entryPrice) * quantity
+                    : (entryPrice - exitPrice) * quantity
+            }
+
+            return {
+                userId: userId, // No longer "undefined"
+                symbol: t.symbol.toUpperCase(),
+                type: type,
+                entryPrice: entryPrice,
+                exitPrice: exitPrice,
+                quantity: quantity,
+                // Default to 0 if missing (matches your DB constraint)
+                stopLoss: t.stopLoss ? parseFloat(t.stopLoss) : 0,
+                entryDate: new Date(t.date),
+                pnl: pnl,
+                status: exitPrice ? "CLOSED" : "OPEN"
+            }
+        })
+
+        // 3. Bulk Create
+        await prisma.trade.createMany({
+            data: formattedTrades
+        })
+
+        revalidatePath("/")
+        return { success: true, count: formattedTrades.length }
+
+    } catch (error) {
+        console.error("Import error:", error)
+        return { success: false, error: "Failed to import trades. Check file format." }
+    }
+}
+
 export async function updateTrade(data: any) {
     const session = await auth()
 

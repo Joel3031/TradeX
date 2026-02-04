@@ -1,12 +1,10 @@
 import { prisma } from "@/lib/db"
-import { auth, signOut } from "@/auth"
-import { Button } from "@/components/ui/button"
-import { ModeToggle } from "@/components/mode-toggle"
+import { auth } from "@/auth"
 import { TradeDialog } from "@/components/trade-dialog"
 import { AppDashboard } from "@/components/app-dashboard"
+import { UserProfileMenu } from "@/components/user-profile-menu"
 import { redirect } from "next/navigation"
 import Image from "next/image"
-import { LogOut } from "lucide-react"
 
 export const dynamic = 'force-dynamic'
 
@@ -44,17 +42,9 @@ export default async function Home() {
       <div className="fixed top-0 left-0 right-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md shadow-sm">
         <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 grid grid-cols-3 items-center">
 
-          {/* LEFT: Sign Out Icon */}
+          {/* LEFT: Empty (To keep logo centered) */}
           <div className="flex justify-start">
-            <form action={async () => {
-              "use server"
-              await signOut()
-            }}>
-              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground">
-                <LogOut className="h-5 w-5" />
-                <span className="sr-only">Sign out</span>
-              </Button>
-            </form>
+            {/* No buttons here */}
           </div>
 
           {/* CENTER: Logo */}
@@ -70,18 +60,33 @@ export default async function Home() {
             </div>
           </div>
 
-          {/* RIGHT: Tools */}
-          <div className="flex justify-end gap-2">
-            <ModeToggle />
+          {/* RIGHT: Tools & Profile */}
+          <div className="flex justify-end items-center gap-3">
+            {/* Trade Button (Desktop) */}
             <div className="hidden md:block">
               <TradeDialog />
+            </div>
+
+            {/* --- PROFILE MENU (DESKTOP ONLY) --- */}
+            <div className="hidden md:block">
+              <UserProfileMenu
+                trades={trades}
+                // FIX: Convert null to undefined using || undefined
+                userEmail={session.user.email || undefined}
+                userName={session.user.name || undefined}
+              />
             </div>
           </div>
         </div>
       </div>
 
       <div className="relative z-10 w-full flex justify-center pt-20">
-        <AppDashboard trades={trades} />
+        <AppDashboard
+          trades={trades}
+          // FIX: Convert null to undefined here as well
+          userEmail={session.user.email || undefined}
+          userName={session.user.name || undefined}
+        />
       </div>
 
     </main>

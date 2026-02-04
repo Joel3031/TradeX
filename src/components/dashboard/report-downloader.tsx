@@ -101,7 +101,7 @@ export function ReportDownloader({ trades }: ReportDownloaderProps) {
             <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-2 border-dashed">
                     <Download className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Export</span>
+                    <span>Export</span>
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-40">

@@ -26,6 +26,35 @@ export function PnlCalendar({ trades, selectedDate, onSelectDate }: PnlCalendarP
     const [currentMonth, setCurrentMonth] = useState(new Date())
     const [localSelectedDate, setLocalSelectedDate] = useState<Date | null>(null)
 
+    // --- NEW: SWIPE LOGIC ADDED HERE ---
+    const [touchStart, setTouchStart] = useState<number | null>(null)
+    const [touchEnd, setTouchEnd] = useState<number | null>(null)
+    const minSwipeDistance = 50
+
+    const onTouchStart = (e: React.TouchEvent) => {
+        setTouchEnd(null)
+        setTouchStart(e.targetTouches[0].clientX)
+    }
+
+    const onTouchMove = (e: React.TouchEvent) => {
+        setTouchEnd(e.targetTouches[0].clientX)
+    }
+
+    const onTouchEnd = () => {
+        if (!touchStart || !touchEnd) return
+        const distance = touchStart - touchEnd
+        const isLeftSwipe = distance > minSwipeDistance
+        const isRightSwipe = distance < -minSwipeDistance
+
+        if (isLeftSwipe) {
+            setCurrentMonth(prev => addMonths(prev, 1))
+        }
+        if (isRightSwipe) {
+            setCurrentMonth(prev => subMonths(prev, 1))
+        }
+    }
+    // -----------------------------------
+
     const activeDate = selectedDate !== undefined ? selectedDate : localSelectedDate
     const handleDateSelect = onSelectDate || setLocalSelectedDate
 
@@ -92,7 +121,13 @@ export function PnlCalendar({ trades, selectedDate, onSelectDate }: PnlCalendarP
     const selectedDayLogs = activeDate ? dailyData.map[activeDate.toDateString()] : null
 
     return (
-        <div className="w-full flex flex-col h-full">
+        <div
+            className="w-full flex flex-col h-full touch-pan-y"
+            // --- NEW: EVENT HANDLERS ATTACHED HERE ---
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+        >
 
             {/* HEADER */}
             <div className="flex items-center justify-between mb-4 px-1 shrink-0">
@@ -110,9 +145,9 @@ export function PnlCalendar({ trades, selectedDate, onSelectDate }: PnlCalendarP
             </div>
 
             {/* CALENDAR GRID */}
-            <div className="grid grid-cols-7 gap-1 md:gap-1 mb-0 flex-1 h-full">
+            <div className="grid grid-cols-7 gap-1 md:gap-1 mb-0 flex-1 h-full select-none">
 
-                {/* Weekdays - FIX: Using index 'i' as key to avoid duplicates */}
+                {/* Weekdays */}
                 {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
                     <div key={i} className="flex items-center justify-center text-[10px] font-medium text-muted-foreground h-6 md:h-auto">
                         {day}
@@ -175,6 +210,11 @@ export function PnlCalendar({ trades, selectedDate, onSelectDate }: PnlCalendarP
                     )
                 })}
             </div>
+
+            {/* Optional: Add a subtle hint for mobile users */}
+            <p className="md:hidden text-[10px] text-center text-muted-foreground mt-2 opacity-50">
+                Swipe left/right to change months
+            </p>
 
             {/* MOBILE ONLY: Selected Date Logs */}
             {activeDate && (
