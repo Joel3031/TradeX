@@ -112,7 +112,9 @@ export function ImportTrades() {
                     <span>Import</span>
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
+
+            {/* Added w-[90%] to ensure it doesn't touch edges on very small screens */}
+            <DialogContent className="w-[90%] sm:max-w-md rounded-lg">
                 <DialogHeader>
                     <DialogTitle>Import Trades</DialogTitle>
                     <DialogDescription>
@@ -121,16 +123,23 @@ export function ImportTrades() {
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
-                    {/* Step 1: Template */}
-                    <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-dashed">
+                    {/* Step 1: Template - UPDATED FOR MOBILE ALIGNMENT */}
+                    {/* Changed to flex-col on mobile, flex-row on desktop */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-muted/50 rounded-lg border border-dashed gap-4 sm:gap-0">
                         <div className="flex items-center gap-3">
-                            <FileSpreadsheet className="h-8 w-8 text-green-600" />
+                            <FileSpreadsheet className="h-8 w-8 text-green-600 shrink-0" />
                             <div className="space-y-0.5">
                                 <p className="text-sm font-medium">Download Template</p>
                                 <p className="text-xs text-muted-foreground">Use this format to avoid errors</p>
                             </div>
                         </div>
-                        <Button variant="secondary" size="sm" onClick={downloadTemplate}>
+                        {/* Button is full width on mobile, auto on desktop */}
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={downloadTemplate}
+                            className="w-full sm:w-auto"
+                        >
                             <Download className="h-4 w-4 mr-2" />
                             Template
                         </Button>

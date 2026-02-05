@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Trade" ADD COLUMN     "fees" DECIMAL(10,2) DEFAULT 0,
+ADD COLUMN     "netPnl" DECIMAL(10,2) DEFAULT 0;

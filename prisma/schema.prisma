@@ -72,6 +72,9 @@ model Trade {
   entryDate  DateTime
   status     String   // "OPEN" or "CLOSED"
   pnl        Decimal?
+
+  fees       Decimal? @default(0) @db.Decimal(10, 2) // Stores the Brokerage + Taxes
+  netPnl     Decimal? @default(0) @db.Decimal(10, 2) // Stores the Final Profit (pnl - fees)
   
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

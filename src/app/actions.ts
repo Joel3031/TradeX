@@ -107,7 +107,6 @@ export async function verifyOtp(email: string, otp: string) {
 export async function createTrade(formData: any) {
     const session = await auth()
 
-    // FIX 1: Strict check ensures 'userId' is available and is a string
     if (!session?.user?.id) {
         return { success: false, error: "Unauthorized: No User ID found" }
     }
@@ -115,17 +114,20 @@ export async function createTrade(formData: any) {
     const userId = session.user.id
 
     try {
-        // FIX 2: Default to 0 if empty (fixes "Type null is not assignable" error)
         const stopLossValue = formData.stopLoss && formData.stopLoss.toString().trim() !== ""
             ? parseFloat(formData.stopLoss)
             : 0;
 
-        // Ensure proper number parsing
         const entryPriceValue = parseFloat(formData.entryPrice);
         const exitPriceValue = parseFloat(formData.exitPrice);
         const quantityValue = parseInt(formData.quantity);
 
-        // Calculate PnL
+        // Capture Fees and Net PnL passed from the form
+        const feesValue = formData.fees ? parseFloat(formData.fees) : 0;
+        // Default Net PnL to 0 if not provided
+        let netPnlValue = formData.netPnl ? parseFloat(formData.netPnl) : 0;
+
+        // Calculate Gross PnL (Logic retained for safety)
         let pnl = null;
         if (formData.exitPrice) {
             if (formData.type === "BUY") {
@@ -133,11 +135,16 @@ export async function createTrade(formData: any) {
             } else {
                 pnl = (entryPriceValue - exitPriceValue) * quantityValue;
             }
+
+            // Fallback: If form didn't send Net PnL, calculate it here
+            if (!formData.netPnl && pnl !== null) {
+                netPnlValue = pnl - feesValue;
+            }
         }
 
         await prisma.trade.create({
             data: {
-                userId: userId, // Now guaranteed to be a string
+                userId: userId,
                 symbol: formData.symbol.toUpperCase(),
                 type: formData.type,
                 entryPrice: entryPriceValue,
@@ -145,7 +152,9 @@ export async function createTrade(formData: any) {
                 quantity: quantityValue,
                 stopLoss: stopLossValue,
                 entryDate: new Date(formData.date),
-                pnl: pnl,
+                pnl: pnl,        // Gross P&L
+                fees: feesValue, // Tax & Charges
+                netPnl: netPnlValue, // Final Profit
                 status: "CLOSED"
             },
         })
@@ -155,6 +164,71 @@ export async function createTrade(formData: any) {
     } catch (error) {
         console.error("Create error:", error)
         return { success: false, error: "Failed to create trade" }
+    }
+}
+
+export async function updateTrade(data: any) {
+    const session = await auth()
+
+    if (!session?.user?.id) {
+        return { success: false, error: "Unauthorized" }
+    }
+
+    try {
+        const existingTrade = await prisma.trade.findUnique({
+            where: { id: data.id },
+        })
+
+        if (!existingTrade || existingTrade.userId !== session.user.id) {
+            return { success: false, error: "Trade not found or unauthorized" }
+        }
+
+        const stopLossValue = data.stopLoss && data.stopLoss.toString().trim() !== ""
+            ? parseFloat(data.stopLoss)
+            : 0;
+
+        const entryPriceValue = parseFloat(data.entryPrice);
+        const exitPriceValue = parseFloat(data.exitPrice);
+        const quantityValue = parseInt(data.quantity);
+
+        // Capture Fees and Net PnL
+        const feesValue = data.fees ? parseFloat(data.fees) : 0;
+        let netPnlValue = data.netPnl ? parseFloat(data.netPnl) : 0;
+
+        let pnl = null;
+        if (data.exitPrice) {
+            if (data.type === "BUY") {
+                pnl = (exitPriceValue - entryPriceValue) * quantityValue;
+            } else {
+                pnl = (entryPriceValue - exitPriceValue) * quantityValue;
+            }
+
+            if (!data.netPnl && pnl !== null) {
+                netPnlValue = pnl - feesValue;
+            }
+        }
+
+        await prisma.trade.update({
+            where: { id: data.id },
+            data: {
+                symbol: data.symbol.toUpperCase(),
+                type: data.type,
+                entryPrice: entryPriceValue,
+                exitPrice: exitPriceValue,
+                quantity: quantityValue,
+                stopLoss: stopLossValue,
+                entryDate: new Date(data.date),
+                pnl: pnl,
+                fees: feesValue,
+                netPnl: netPnlValue
+            },
+        })
+
+        revalidatePath("/")
+        return { success: true }
+    } catch (error) {
+        console.error("Update error:", error)
+        return { success: false, error: "Failed to update trade" }
     }
 }
 
@@ -211,64 +285,6 @@ export async function importTrades(tradesData: any[]) {
     } catch (error) {
         console.error("Import error:", error)
         return { success: false, error: "Failed to import trades. Check file format." }
-    }
-}
-
-export async function updateTrade(data: any) {
-    const session = await auth()
-
-    // FIX 1: Strict check
-    if (!session?.user?.id) {
-        return { success: false, error: "Unauthorized" }
-    }
-
-    try {
-        const existingTrade = await prisma.trade.findUnique({
-            where: { id: data.id },
-        })
-
-        if (!existingTrade || existingTrade.userId !== session.user.id) {
-            return { success: false, error: "Trade not found or unauthorized" }
-        }
-
-        // FIX 2: Default to 0 if empty
-        const stopLossValue = data.stopLoss && data.stopLoss.toString().trim() !== ""
-            ? parseFloat(data.stopLoss)
-            : 0;
-
-        const entryPriceValue = parseFloat(data.entryPrice);
-        const exitPriceValue = parseFloat(data.exitPrice);
-        const quantityValue = parseInt(data.quantity);
-
-        // Calculate PnL
-        let pnl = null;
-        if (data.exitPrice) {
-            if (data.type === "BUY") {
-                pnl = (exitPriceValue - entryPriceValue) * quantityValue;
-            } else {
-                pnl = (entryPriceValue - exitPriceValue) * quantityValue;
-            }
-        }
-
-        await prisma.trade.update({
-            where: { id: data.id },
-            data: {
-                symbol: data.symbol.toUpperCase(),
-                type: data.type,
-                entryPrice: entryPriceValue,
-                exitPrice: exitPriceValue,
-                quantity: quantityValue,
-                stopLoss: stopLossValue,
-                entryDate: new Date(data.date),
-                pnl: pnl,
-            },
-        })
-
-        revalidatePath("/")
-        return { success: true }
-    } catch (error) {
-        console.error("Update error:", error)
-        return { success: false, error: "Failed to update trade" }
     }
 }
 

@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch" // Import the new Switch
+import { Switch } from "@/components/ui/switch"
 import { TradeHistory } from "@/components/trade-history"
 import { MarketNews } from "@/components/dashboard/market-news"
 import { EquityChart } from "@/components/dashboard/equity-chart"
@@ -30,7 +30,7 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
     const [analyticsView, setAnalyticsView] = useState<"chart" | "calendar">("chart")
     const [showScrollTop, setShowScrollTop] = useState(false)
     const [focusDate, setFocusDate] = useState<Date | null>(null)
-    const { theme, setTheme } = useTheme() // Get current theme
+    const { theme, setTheme } = useTheme()
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
@@ -47,7 +47,6 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
         window.scrollTo({ top: 0, behavior: "smooth" })
     }
 
-    // Helper to get initials
     const getInitials = (name: string) => {
         return name
             .split(' ')
@@ -60,7 +59,7 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
     return (
         <div className="w-full max-w-7xl px-4 md:px-8 pt-6 pb-28 md:pb-10 relative">
 
-            {/* ... [DESKTOP VIEW CODE - UNCHANGED] ... */}
+            {/* ... [DESKTOP VIEW UNCHANGED] ... */}
             <div className="hidden md:block space-y-6">
                 <Tabs defaultValue="overview" className="space-y-6">
                     <div className="flex items-center justify-between">
@@ -113,13 +112,19 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
             <div className="md:hidden space-y-6">
 
                 {activeTab === "home" && (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8">
+                    /* FIXED: Removed 'animate-in' and 'transform' classes to allow sticky positioning */
+                    <div className="space-y-8">
                         <div>
                             <h2 className="text-2xl font-bold tracking-tight">Overview</h2>
                             <p className="text-sm text-muted-foreground">Market Snapshot</p>
                         </div>
                         <DashboardOverview trades={trades} />
-                        <div className="pt-2"><MarketNews /></div>
+
+                        {/* Market News Container */}
+                        {/* The component uses -mx-4 internally to pull edge-to-edge */}
+                        <div className="pt-2">
+                            <MarketNews />
+                        </div>
                     </div>
                 )}
 
@@ -145,7 +150,6 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                     </div>
                 )}
 
-                {/* --- UPDATED PROFILE TAB --- */}
                 {activeTab === "profile" && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-6">
                         <div>
@@ -153,10 +157,9 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                             <p className="text-sm text-muted-foreground">Manage your settings</p>
                         </div>
 
-                        {/* User Card */}
                         <div className="flex items-center gap-4 p-5 bg-card border rounded-2xl shadow-sm">
                             <Avatar className="h-16 w-16 border-2 border-primary/20">
-                                <AvatarImage src="" /> {/* Left empty to trigger fallback */}
+                                <AvatarImage src="" />
                                 <AvatarFallback className="bg-gradient-to-br from-green-500 to-emerald-700 text-white text-xl font-bold">
                                     {userName ? getInitials(userName) : "T"}
                                 </AvatarFallback>
@@ -168,8 +171,6 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                         </div>
 
                         <div className="space-y-6">
-
-                            {/* Theme Toggle Section */}
                             <div className="space-y-3">
                                 <h4 className="text-xs uppercase text-muted-foreground font-semibold tracking-wider ml-1">Appearance</h4>
                                 <div className="flex items-center justify-between p-4 bg-card border rounded-xl">
@@ -191,11 +192,9 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                                 </div>
                             </div>
 
-                            {/* Data Management Section */}
                             <div className="space-y-3">
                                 <h4 className="text-xs uppercase text-muted-foreground font-semibold tracking-wider ml-1">Data Management</h4>
                                 <div className="grid grid-cols-2 gap-3">
-                                    {/* These components now render visible text */}
                                     <div className="[&>button]:w-full [&>button]:h-12 [&>button]:justify-start [&>button]:rounded-xl [&>button]:font-medium">
                                         <ImportTrades />
                                     </div>
@@ -205,7 +204,6 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                                 </div>
                             </div>
 
-                            {/* Logout Section */}
                             <div className="pt-6">
                                 <Button
                                     variant="destructive"
@@ -219,20 +217,17 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                                     TradeX v1.0.2 • Build 2026
                                 </p>
                             </div>
-
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Scroll To Top */}
             {showScrollTop && (
                 <Button onClick={scrollToTop} size="icon" className="fixed bottom-24 right-4 z-50 rounded-full shadow-lg bg-primary/90 hover:bg-primary transition-all duration-300 animate-in fade-in zoom-in">
                     <ArrowUp className="h-5 w-5" />
                 </Button>
             )}
 
-            {/* Mobile Bottom Nav */}
             <div className="fixed bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur-lg p-1 md:hidden z-50 shadow-[0_-1px_3px_rgba(0,0,0,0.05)]">
                 <div className="flex justify-between items-center px-2 h-16">
                     <button onClick={() => setActiveTab("home")} className={`flex flex-col items-center justify-center w-14 space-y-1 transition-colors ${activeTab === "home" ? "text-green-600" : "text-muted-foreground"}`}>

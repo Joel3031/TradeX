@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createTrade, updateTrade } from "@/app/actions"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
+import { calculateIntradayCharges } from "@/lib/tax-calculator"
 
 export interface TradeData {
     id?: string
@@ -19,6 +20,8 @@ export interface TradeData {
     stopLoss: string
     date: string
     notes?: string
+    fees?: number
+    netPnl?: number
 }
 
 interface TradeFormProps {
@@ -43,43 +46,61 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
-        // --- MANUAL VALIDATION START ---
-        // This replaces the HTML 'required' attribute so we can show custom toasts
-
         if (!formData.symbol) {
             toast.warning("Please enter a Symbol (e.g., NIFTY)")
             return
         }
-
         if (!formData.entryPrice || !formData.exitPrice) {
             toast.warning("Entry Price and Exit Price are mandatory.")
             return
         }
-
         if (!formData.quantity) {
             toast.warning("Please enter the Quantity.")
             return
         }
-
         if (!formData.date) {
             toast.warning("Please select a Date.")
             return
         }
-        // --- MANUAL VALIDATION END ---
 
         setLoading(true)
 
         try {
+            // 1. Convert inputs to numbers
+            const entry = parseFloat(formData.entryPrice)
+            const exit = parseFloat(formData.exitPrice)
+            const qty = parseFloat(formData.quantity)
+
+            // 2. Calculate Taxes & Net PnL locally
+            const taxResult = calculateIntradayCharges(entry, exit, qty, formData.type)
+
+            // 3. Create Payload
+            // Explicitly adding fees and netPnl to the object sent to the server
+            const payload = {
+                ...formData,
+                fees: taxResult.totalCharges,
+                netPnl: taxResult.netPnl,
+                id: initialData?.id
+            }
+
             let result;
 
             if (initialData?.id) {
-                result = await updateTrade({ ...formData, id: initialData.id })
+                result = await updateTrade(payload)
             } else {
-                result = await createTrade(formData)
+                result = await createTrade(payload)
             }
 
             if (result.success) {
-                toast.success(initialData ? "Trade Updated" : "Trade Logged Successfully")
+                const pnlFormatted = taxResult.netPnl.toFixed(2)
+                const pnlSign = taxResult.netPnl >= 0 ? "+" : ""
+
+                toast.success(
+                    initialData
+                        ? "Trade Updated"
+                        : `Trade Logged! Net P&L: ₹${pnlSign}${pnlFormatted}`
+                )
+
                 if (onSuccess) {
                     onSuccess()
                 } else {
@@ -108,21 +129,17 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
 
     return (
         <form onSubmit={handleSubmit} className="space-y-5 py-4">
-
-            {/* 1. SYMBOL */}
             <div className="space-y-2">
                 <Label className={labelClasses}>Symbol</Label>
                 <Input
                     name="symbol"
                     value={formData.symbol}
                     onChange={handleChange}
-                    // REMOVED 'required' to prevent browser tooltip
                     className={`${inputClasses} uppercase font-semibold`}
                     placeholder="e.g. NIFTY"
                 />
             </div>
 
-            {/* 2. TYPE */}
             <div className="space-y-2">
                 <Label className={labelClasses}>Type</Label>
                 <Select value={formData.type} onValueChange={(val: any) => setFormData(prev => ({ ...prev, type: val }))}>
@@ -136,7 +153,6 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
                 </Select>
             </div>
 
-            {/* 3. ENTRY & EXIT */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <Label className={labelClasses}>Entry Price</Label>
@@ -164,7 +180,6 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
                 </div>
             </div>
 
-            {/* 4. QUANTITY & STOP LOSS */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <Label className={labelClasses}>Quantity</Label>
@@ -173,7 +188,6 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
                         name="quantity"
                         value={formData.quantity}
                         onChange={handleChange}
-                        // REMOVED 'required'
                         className={inputClasses}
                         placeholder="Qty"
                     />
@@ -192,7 +206,6 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
                 </div>
             </div>
 
-            {/* 5. DATE */}
             <div className="space-y-2">
                 <Label className={labelClasses}>Date</Label>
                 <Input
@@ -200,7 +213,6 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
                     name="date"
                     value={formData.date}
                     onChange={handleChange}
-                    // REMOVED 'required'
                     className={inputClasses}
                 />
             </div>
