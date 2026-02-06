@@ -14,13 +14,15 @@ import { Upload, FileSpreadsheet, Download, Loader2, AlertCircle } from "lucide-
 import { toast } from "sonner"
 import * as XLSX from "xlsx"
 import { importTrades } from "@/app/actions"
+// 1. Import the calculator
+import { calculateIntradayCharges } from "@/lib/tax-calculator"
 
 export function ImportTrades() {
     const [isOpen, setIsOpen] = useState(false)
     const [loading, setLoading] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // 1. GENERATE TEMPLATE
+    // GENERATE TEMPLATE
     const downloadTemplate = () => {
         const template = [
             {
@@ -39,7 +41,7 @@ export function ImportTrades() {
         XLSX.writeFile(wb, "TradeX_Import_Template.xlsx")
     }
 
-    // 2. HANDLE FILE UPLOAD
+    // HANDLE FILE UPLOAD
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
@@ -61,20 +63,42 @@ export function ImportTrades() {
                     return
                 }
 
-                // Normalise Keys (Handle different case/spacing)
-                const normalizedData = data.map((row: any) => ({
-                    date: row["Date"] || row["date"],
-                    symbol: row["Symbol"] || row["symbol"],
-                    type: row["Type"] || row["type"],
-                    quantity: row["Quantity"] || row["Qty"] || row["quantity"],
-                    entryPrice: row["Entry Price"] || row["Entry"] || row["entryPrice"],
-                    exitPrice: row["Exit Price"] || row["Exit"] || row["exitPrice"],
-                    stopLoss: row["Stop Loss"] || row["SL"] || row["stopLoss"],
-                }))
+                // 2. Normalise Keys & Calculate Taxes
+                const normalizedData = data.map((row: any) => {
+                    // Extract values safely
+                    const entryPrice = parseFloat(row["Entry Price"] || row["Entry"] || row["entryPrice"] || 0);
+                    const exitPrice = parseFloat(row["Exit Price"] || row["Exit"] || row["exitPrice"] || 0);
+                    const quantity = parseInt(row["Quantity"] || row["Qty"] || row["quantity"] || 0);
+                    const type = (row["Type"] || row["type"] || "BUY").toUpperCase();
+
+                    // Run Tax Calculation per row
+                    let fees = 0;
+                    let netPnl = 0;
+
+                    // Only calculate if we have valid numbers
+                    if (entryPrice && exitPrice && quantity) {
+                        const taxResult = calculateIntradayCharges(entryPrice, exitPrice, quantity, type as "BUY" | "SELL");
+                        fees = taxResult.totalCharges;
+                        netPnl = taxResult.netPnl;
+                    }
+
+                    return {
+                        date: row["Date"] || row["date"],
+                        symbol: row["Symbol"] || row["symbol"],
+                        type: type,
+                        quantity: quantity,
+                        entryPrice: entryPrice,
+                        exitPrice: exitPrice,
+                        stopLoss: row["Stop Loss"] || row["SL"] || row["stopLoss"] || 0,
+                        // Add calculated fields to payload
+                        fees: fees,
+                        netPnl: netPnl
+                    };
+                })
 
                 // Basic Validation
                 const validRows = normalizedData.filter(
-                    (r) => r.symbol && r.quantity && r.entryPrice && r.date
+                    (r) => r.symbol && r.quantity > 0 && r.entryPrice > 0 && r.date
                 )
 
                 if (validRows.length === 0) {
@@ -98,7 +122,7 @@ export function ImportTrades() {
                 toast.error("Failed to parse file")
             } finally {
                 setLoading(false)
-                if (fileInputRef.current) fileInputRef.current.value = "" // Reset input
+                if (fileInputRef.current) fileInputRef.current.value = ""
             }
         }
         reader.readAsBinaryString(file)
@@ -113,7 +137,6 @@ export function ImportTrades() {
                 </Button>
             </DialogTrigger>
 
-            {/* Added w-[90%] to ensure it doesn't touch edges on very small screens */}
             <DialogContent className="w-[90%] sm:max-w-md rounded-lg">
                 <DialogHeader>
                     <DialogTitle>Import Trades</DialogTitle>
@@ -123,8 +146,6 @@ export function ImportTrades() {
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
-                    {/* Step 1: Template - UPDATED FOR MOBILE ALIGNMENT */}
-                    {/* Changed to flex-col on mobile, flex-row on desktop */}
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-muted/50 rounded-lg border border-dashed gap-4 sm:gap-0">
                         <div className="flex items-center gap-3">
                             <FileSpreadsheet className="h-8 w-8 text-green-600 shrink-0" />
@@ -133,7 +154,6 @@ export function ImportTrades() {
                                 <p className="text-xs text-muted-foreground">Use this format to avoid errors</p>
                             </div>
                         </div>
-                        {/* Button is full width on mobile, auto on desktop */}
                         <Button
                             variant="secondary"
                             size="sm"
@@ -145,7 +165,6 @@ export function ImportTrades() {
                         </Button>
                     </div>
 
-                    {/* Step 2: Upload */}
                     <div className="flex items-center justify-center w-full">
                         <label
                             htmlFor="dropzone-file"

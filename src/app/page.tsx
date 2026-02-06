@@ -15,18 +15,27 @@ export default async function Home() {
     redirect("/login")
   }
 
+  // 1. FETCH USER SETTINGS (Include showNetPnl)
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { showNetPnl: true, email: true, name: true }
+  })
+
   const rawTrades = await prisma.trade.findMany({
     where: { userId: session.user.id },
     orderBy: { entryDate: 'desc' },
     take: 100
   })
 
-  // TRANSFORM DATA
+  // 2. PREPARE DATA
   const trades = rawTrades.map(trade => {
-    // 1. Safe Number Conversions
-    const grossPnl = trade.pnl ? Number(trade.pnl) : 0
-    const fees = trade.fees ? Number(trade.fees) : 0
-    const netPnl = trade.netPnl ? Number(trade.netPnl) : 0
+    // Helper to ensure numbers
+    const grossVal = trade.pnl ? Number(trade.pnl) : 0
+    const netVal = trade.netPnl ? Number(trade.netPnl) : 0
+    const feesVal = trade.fees ? Number(trade.fees) : 0
+
+    // Determine default display value based on user preference
+    const defaultPnl = user?.showNetPnl ? netVal : grossVal
 
     return {
       ...trade,
@@ -35,22 +44,19 @@ export default async function Home() {
       stopLoss: Number(trade.stopLoss),
       quantity: Number(trade.quantity),
 
-      // --- THE FIX ---
-      // We overwrite 'pnl' with 'netPnl'. 
-      // This forces the UI (Charts, History, Overview) to display the Net Profit.
-      pnl: netPnl,
+      // We pass the default preference to 'pnl' for initial render
+      pnl: defaultPnl,
 
-      // We keep the original values accessible if needed
-      grossPnl: grossPnl,
-      fees: fees,
-      netPnl: netPnl,
+      // CRITICAL: We pass raw values so the UI can swap them later
+      grossPnl: grossVal,
+      netPnl: netVal,
+      fees: feesVal,
     }
   })
 
   return (
     <main className="min-h-screen bg-zinc-50 dark:bg-zinc-950 relative">
-
-      {/* Gradient Background */}
+      {/* ... Background Div ... */}
       <div
         className="absolute top-0 left-0 w-full h-[600px] bg-gradient-to-b from-emerald-500/10 via-transparent to-transparent dark:from-emerald-500/10 dark:via-transparent dark:to-transparent pointer-events-none z-0"
       />
@@ -58,11 +64,7 @@ export default async function Home() {
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md shadow-sm">
         <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 grid grid-cols-3 items-center">
-
-          {/* LEFT: Empty */}
           <div className="flex justify-start" />
-
-          {/* CENTER: Logo */}
           <div className="flex justify-center">
             <div className="relative h-8 w-28 md:h-10 md:w-40">
               <Image
@@ -74,8 +76,6 @@ export default async function Home() {
               />
             </div>
           </div>
-
-          {/* RIGHT: Tools & Profile */}
           <div className="flex justify-end items-center gap-3">
             <div className="hidden md:block">
               <TradeDialog />
@@ -96,9 +96,10 @@ export default async function Home() {
           trades={trades}
           userEmail={session.user.email || undefined}
           userName={session.user.name || undefined}
+          // PASS THE PREFERENCE TO THE UI
+          initialShowNetPnl={user?.showNetPnl ?? true}
         />
       </div>
-
     </main>
   )
 }

@@ -235,23 +235,24 @@ export async function updateTrade(data: any) {
 export async function importTrades(tradesData: any[]) {
     const session = await auth()
 
-    // 1. Strict Check & Capture ID
     if (!session?.user?.id) {
         return { success: false, error: "Unauthorized" }
     }
 
-    // Assign to a const variable so TypeScript knows it won't change
     const userId = session.user.id
 
     try {
-        // 2. Map data using the captured 'userId'
         const formattedTrades = tradesData.map((t) => {
             const entryPrice = parseFloat(t.entryPrice)
             const exitPrice = t.exitPrice ? parseFloat(t.exitPrice) : null
             const quantity = parseInt(t.quantity)
             const type = t.type.toUpperCase()
 
-            // Calculate PnL safely
+            // Capture calculated values from client
+            const fees = t.fees ? parseFloat(t.fees) : 0
+            const netPnl = t.netPnl ? parseFloat(t.netPnl) : 0
+
+            // Gross PnL fallback (if not provided, though your tax calc handles it)
             let pnl = null
             if (exitPrice) {
                 pnl = type === "BUY"
@@ -260,21 +261,21 @@ export async function importTrades(tradesData: any[]) {
             }
 
             return {
-                userId: userId, // No longer "undefined"
+                userId: userId,
                 symbol: t.symbol.toUpperCase(),
                 type: type,
                 entryPrice: entryPrice,
                 exitPrice: exitPrice,
                 quantity: quantity,
-                // Default to 0 if missing (matches your DB constraint)
                 stopLoss: t.stopLoss ? parseFloat(t.stopLoss) : 0,
                 entryDate: new Date(t.date),
-                pnl: pnl,
+                pnl: pnl,         // Gross PnL
+                fees: fees,       // Tax
+                netPnl: netPnl,   // Net PnL
                 status: exitPrice ? "CLOSED" : "OPEN"
             }
         })
 
-        // 3. Bulk Create
         await prisma.trade.createMany({
             data: formattedTrades
         })
@@ -355,6 +356,22 @@ export async function getMarketData() {
     } catch (error) {
         console.error("❌ Market Data Error:", error);
         return getMockData();
+    }
+}
+
+export async function updateUserPreference(key: string, value: boolean) {
+    const session = await auth()
+    if (!session?.user?.id) return { success: false, error: "Unauthorized" }
+
+    try {
+        await prisma.user.update({
+            where: { id: session.user.id },
+            data: { [key]: value }
+        })
+        revalidatePath("/") // Refresh data
+        return { success: true }
+    } catch (error) {
+        return { success: false, error: "Failed to update settings" }
     }
 }
 

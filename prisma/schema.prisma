@@ -46,6 +46,7 @@ model User {
   image         String?
   phoneNumber   String?
   password      String?
+  showNetPnl    Boolean   @default(true)
   
   accounts      Account[]
   sessions      Session[]

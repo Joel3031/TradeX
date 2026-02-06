@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react" // Import useMemo
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { TradeHistory } from "@/components/trade-history"
@@ -11,27 +11,52 @@ import { PnlCalendar } from "@/components/dashboard/pnl-calendar"
 import { DashboardOverview } from "@/components/dashboard-overview"
 import { ReportDownloader } from "@/components/dashboard/report-downloader"
 import { ImportTrades } from "@/components/dashboard/import-trades"
+import { updateUserPreference } from "@/app/actions" // Import the action
+import { toast } from "sonner"
 
 import { useTheme } from "next-themes"
 import { signOut } from "next-auth/react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { LayoutDashboard, List, Plus, LineChart, Calendar as CalendarIcon, Newspaper, ArrowUp, User, Moon, LogOut } from "lucide-react"
+// Import Receipt icon
+import { LayoutDashboard, List, Plus, LineChart, Calendar as CalendarIcon, Newspaper, ArrowUp, User, Moon, LogOut, Receipt } from "lucide-react"
 
 interface AppDashboardProps {
     trades: any[]
     userEmail?: string | null
     userName?: string | null
+    initialShowNetPnl?: boolean // Receive the prop
 }
 
-export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps) {
+export function AppDashboard({ trades, userEmail, userName, initialShowNetPnl = true }: AppDashboardProps) {
     const [activeTab, setActiveTab] = useState<"home" | "analytics" | "journal" | "profile">("home")
     const [analyticsView, setAnalyticsView] = useState<"chart" | "calendar">("chart")
     const [showScrollTop, setShowScrollTop] = useState(false)
     const [focusDate, setFocusDate] = useState<Date | null>(null)
     const { theme, setTheme } = useTheme()
     const [mounted, setMounted] = useState(false)
+
+    // NEW STATE: PnL Preference
+    const [showNetPnl, setShowNetPnl] = useState(initialShowNetPnl)
+
+    // DYNAMIC DATA MAPPING
+    // This creates a new 'trades' array automatically whenever 'showNetPnl' changes
+    const displayTrades = useMemo(() => {
+        return trades.map(t => ({
+            ...t,
+            // If switch is ON, use netPnl. If OFF, use grossPnl.
+            pnl: showNetPnl ? t.netPnl : t.grossPnl
+        }))
+    }, [trades, showNetPnl])
+
+    // Handle Toggle Click
+    const handlePreferenceChange = async (checked: boolean) => {
+        setShowNetPnl(checked) // Update UI instantly
+        const res = await updateUserPreference("showNetPnl", checked) // Save to DB
+        if (!res.success) toast.error("Failed to save preference")
+        else toast.success(`Switched to ${checked ? "Net P&L" : "Gross P&L"}`)
+    }
 
     useEffect(() => {
         setMounted(true)
@@ -48,28 +73,26 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
     }
 
     const getInitials = (name: string) => {
-        return name
-            .split(' ')
-            .map(word => word[0])
-            .join('')
-            .substring(0, 2)
-            .toUpperCase()
+        return name.split(' ').map(word => word[0]).join('').substring(0, 2).toUpperCase()
     }
 
     return (
         <div className="w-full max-w-7xl px-4 md:px-8 pt-6 pb-28 md:pb-10 relative">
 
-            {/* ... [DESKTOP VIEW UNCHANGED] ... */}
+            {/* Desktop View */}
             <div className="hidden md:block space-y-6">
                 <Tabs defaultValue="overview" className="space-y-6">
                     <div className="flex items-center justify-between">
                         <div>
                             <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-                            <p className="text-muted-foreground">Track your performance and analyze your edge.</p>
+                            {/* Show current mode in header */}
+                            <p className="text-muted-foreground">
+                                Viewing: <span className="font-semibold text-foreground">{showNetPnl ? "Net P&L (After Tax)" : "Gross P&L (Before Tax)"}</span>
+                            </p>
                         </div>
                         <div className="flex items-center gap-3">
                             <ImportTrades />
-                            <ReportDownloader trades={trades} />
+                            <ReportDownloader trades={displayTrades} />
                             <TabsList>
                                 <TabsTrigger value="overview" className="flex items-center gap-2"><LayoutDashboard className="h-4 w-4" /> Overview</TabsTrigger>
                                 <TabsTrigger value="analytics" className="flex items-center gap-2"><LineChart className="h-4 w-4" /> Analytics</TabsTrigger>
@@ -77,28 +100,30 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                             </TabsList>
                         </div>
                     </div>
+
+                    {/* IMPORTANT: Use 'displayTrades' instead of 'trades' */}
                     <TabsContent value="overview" className="space-y-6 animate-in fade-in-50 duration-500">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <div className="space-y-4">
-                                <div><DashboardOverview trades={trades} /></div>
+                                <div><DashboardOverview trades={displayTrades} /></div>
                                 <div className="h-[1px] w-full bg-border/40" />
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-lg">Recent Executions</h3>
                                     <div className="bg-card rounded-xl border shadow-sm p-0 overflow-hidden h-[320px]">
-                                        <TradeHistory trades={trades} focusDate={focusDate} onClearFocus={() => setFocusDate(null)} />
+                                        <TradeHistory trades={displayTrades} focusDate={focusDate} onClearFocus={() => setFocusDate(null)} />
                                     </div>
                                 </div>
                             </div>
                             <div className="space-y-4 flex flex-col h-full">
                                 <h3 className="font-semibold text-lg">P/L Calendar</h3>
                                 <div className="bg-card rounded-xl border shadow-sm p-6 flex-1 flex flex-col">
-                                    <PnlCalendar trades={trades} selectedDate={focusDate} onSelectDate={setFocusDate} />
+                                    <PnlCalendar trades={displayTrades} selectedDate={focusDate} onSelectDate={setFocusDate} />
                                 </div>
                             </div>
                         </div>
                     </TabsContent>
                     <TabsContent value="analytics" className="space-y-4 animate-in fade-in-50 duration-500">
-                        <EquityChart trades={trades} />
+                        <EquityChart trades={displayTrades} />
                     </TabsContent>
                     <TabsContent value="news" className="space-y-4 animate-in fade-in-50 duration-500">
                         <div className="bg-card rounded-xl border shadow-sm p-6">
@@ -108,20 +133,17 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                 </Tabs>
             </div>
 
-            {/* ================= MOBILE VIEW ================= */}
+            {/* Mobile View */}
             <div className="md:hidden space-y-6">
-
                 {activeTab === "home" && (
-                    /* FIXED: Removed 'animate-in' and 'transform' classes to allow sticky positioning */
                     <div className="space-y-8">
                         <div>
                             <h2 className="text-2xl font-bold tracking-tight">Overview</h2>
-                            <p className="text-sm text-muted-foreground">Market Snapshot</p>
+                            <p className="text-sm text-muted-foreground">
+                                {showNetPnl ? "Net P&L" : "Gross P&L"} View
+                            </p>
                         </div>
-                        <DashboardOverview trades={trades} />
-
-                        {/* Market News Container */}
-                        {/* The component uses -mx-4 internally to pull edge-to-edge */}
+                        <DashboardOverview trades={displayTrades} />
                         <div className="pt-2">
                             <MarketNews />
                         </div>
@@ -138,7 +160,7 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                             </div>
                         </div>
                         <div className="min-h-[400px]">
-                            {analyticsView === "chart" ? <EquityChart trades={trades} /> : <div className="space-y-2"><PnlCalendar trades={trades} selectedDate={focusDate} onSelectDate={setFocusDate} /></div>}
+                            {analyticsView === "chart" ? <EquityChart trades={displayTrades} /> : <div className="space-y-2"><PnlCalendar trades={displayTrades} selectedDate={focusDate} onSelectDate={setFocusDate} /></div>}
                         </div>
                     </div>
                 )}
@@ -146,7 +168,7 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                 {activeTab === "journal" && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <h2 className="text-2xl font-bold tracking-tight mb-4">Journal</h2>
-                        <div className="pb-10"><TradeHistory trades={trades} /></div>
+                        <div className="pb-10"><TradeHistory trades={displayTrades} /></div>
                     </div>
                 )}
 
@@ -171,6 +193,29 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                         </div>
 
                         <div className="space-y-6">
+
+                            {/* --- PREFERENCE SECTION --- */}
+                            <div className="space-y-3">
+                                <h4 className="text-xs uppercase text-muted-foreground font-semibold tracking-wider ml-1">Calculation Preferences</h4>
+                                <div className="flex items-center justify-between p-4 bg-card border rounded-xl">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+                                            <Receipt className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="font-medium text-sm">Show Net P&L (After Tax)</span>
+                                            <span className="text-xs text-muted-foreground">Deduct brokerage & charges</span>
+                                        </div>
+                                    </div>
+                                    {/* The Switch Component */}
+                                    <Switch
+                                        checked={showNetPnl}
+                                        onCheckedChange={handlePreferenceChange}
+                                    />
+                                </div>
+                            </div>
+                            {/* ------------------------- */}
+
                             <div className="space-y-3">
                                 <h4 className="text-xs uppercase text-muted-foreground font-semibold tracking-wider ml-1">Appearance</h4>
                                 <div className="flex items-center justify-between p-4 bg-card border rounded-xl">
@@ -199,7 +244,7 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                                         <ImportTrades />
                                     </div>
                                     <div className="[&>button]:w-full [&>button]:h-12 [&>button]:justify-start [&>button]:rounded-xl [&>button]:font-medium">
-                                        <ReportDownloader trades={trades} />
+                                        <ReportDownloader trades={displayTrades} />
                                     </div>
                                 </div>
                             </div>
@@ -222,6 +267,7 @@ export function AppDashboard({ trades, userEmail, userName }: AppDashboardProps)
                 )}
             </div>
 
+            {/* Scroll to Top and Bottom Nav (UNCHANGED) */}
             {showScrollTop && (
                 <Button onClick={scrollToTop} size="icon" className="fixed bottom-24 right-4 z-50 rounded-full shadow-lg bg-primary/90 hover:bg-primary transition-all duration-300 animate-in fade-in zoom-in">
                     <ArrowUp className="h-5 w-5" />
