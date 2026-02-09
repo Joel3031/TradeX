@@ -152,15 +152,49 @@ export function AppDashboard({ trades, userEmail, userName, initialShowNetPnl = 
 
                 {activeTab === "analytics" && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-6">
+
+                        {/* 1. HEADER & TOGGLE */}
                         <div className="flex items-center justify-between">
                             <h2 className="text-2xl font-bold tracking-tight">Analytics</h2>
-                            <div className="flex bg-muted rounded-lg p-1 gap-1">
-                                <button onClick={() => setAnalyticsView("chart")} className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${analyticsView === "chart" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}>Chart</button>
-                                <button onClick={() => setAnalyticsView("calendar")} className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${analyticsView === "calendar" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}>Calendar</button>
+
+                            {/* Option 2: Minimalist Icon Toggle */}
+                            <div className="flex items-center p-1 bg-muted/50 rounded-lg border border-border/50 gap-1">
+                                <button
+                                    onClick={() => setAnalyticsView("chart")}
+                                    className={`p-2 rounded-md transition-all ${analyticsView === "chart"
+                                            ? "bg-background shadow-sm text-foreground ring-1 ring-border/10"
+                                            : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                                        }`}
+                                    title="Chart View"
+                                >
+                                    <LineChart className="h-4 w-4" />
+                                </button>
+                                <button
+                                    onClick={() => setAnalyticsView("calendar")}
+                                    className={`p-2 rounded-md transition-all ${analyticsView === "calendar"
+                                            ? "bg-background shadow-sm text-foreground ring-1 ring-border/10"
+                                            : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                                        }`}
+                                    title="Calendar View"
+                                >
+                                    <CalendarIcon className="h-4 w-4" />
+                                </button>
                             </div>
                         </div>
+
+                        {/* 2. CONTENT AREA (This was likely missing) */}
                         <div className="min-h-[400px]">
-                            {analyticsView === "chart" ? <EquityChart trades={displayTrades} /> : <div className="space-y-2"><PnlCalendar trades={displayTrades} selectedDate={focusDate} onSelectDate={setFocusDate} /></div>}
+                            {analyticsView === "chart" ? (
+                                <EquityChart trades={displayTrades} />
+                            ) : (
+                                <div className="space-y-2">
+                                    <PnlCalendar
+                                        trades={displayTrades}
+                                        selectedDate={focusDate}
+                                        onSelectDate={setFocusDate}
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

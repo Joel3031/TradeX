@@ -26,7 +26,21 @@ export function PnlCalendar({ trades, selectedDate, onSelectDate }: PnlCalendarP
     const [currentMonth, setCurrentMonth] = useState(new Date())
     const [localSelectedDate, setLocalSelectedDate] = useState<Date | null>(null)
 
-    // --- NEW: SWIPE LOGIC ADDED HERE ---
+    // Animation State
+    const [slideDirection, setSlideDirection] = useState<"left" | "right" | "none">("none")
+
+    // --- NAVIGATION LOGIC ---
+    const changeMonth = (direction: "next" | "prev") => {
+        if (direction === "next") {
+            setSlideDirection("right")
+            setCurrentMonth(prev => addMonths(prev, 1))
+        } else {
+            setSlideDirection("left")
+            setCurrentMonth(prev => subMonths(prev, 1))
+        }
+    }
+
+    // --- SWIPE LOGIC ---
     const [touchStart, setTouchStart] = useState<number | null>(null)
     const [touchEnd, setTouchEnd] = useState<number | null>(null)
     const minSwipeDistance = 50
@@ -46,14 +60,9 @@ export function PnlCalendar({ trades, selectedDate, onSelectDate }: PnlCalendarP
         const isLeftSwipe = distance > minSwipeDistance
         const isRightSwipe = distance < -minSwipeDistance
 
-        if (isLeftSwipe) {
-            setCurrentMonth(prev => addMonths(prev, 1))
-        }
-        if (isRightSwipe) {
-            setCurrentMonth(prev => subMonths(prev, 1))
-        }
+        if (isLeftSwipe) changeMonth("next")
+        if (isRightSwipe) changeMonth("prev")
     }
-    // -----------------------------------
 
     const activeDate = selectedDate !== undefined ? selectedDate : localSelectedDate
     const handleDateSelect = onSelectDate || setLocalSelectedDate
@@ -122,38 +131,46 @@ export function PnlCalendar({ trades, selectedDate, onSelectDate }: PnlCalendarP
 
     return (
         <div
-            className="w-full flex flex-col h-full touch-pan-y"
-            // --- NEW: EVENT HANDLERS ATTACHED HERE ---
+            // FIX: Added 'overflow-hidden' to hide scrollbar during swipe animation on mobile
+            // 'md:overflow-visible' keeps desktop tooltips visible
+            className="w-full flex flex-col h-full touch-pan-y overflow-hidden md:overflow-visible"
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
         >
-
             {/* HEADER */}
             <div className="flex items-center justify-between mb-4 px-1 shrink-0">
-                <h2 className="text-sm font-bold md:text-base">
+                <h2 className="text-sm font-bold md:text-base animate-in fade-in duration-300" key={currentMonth.toISOString()}>
                     {format(currentMonth, "MMMM yyyy")}
                 </h2>
                 <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => changeMonth("prev")}>
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => changeMonth("next")}>
                         <ChevronRight className="h-4 w-4" />
                     </Button>
                 </div>
             </div>
 
-            {/* CALENDAR GRID */}
-            <div className="grid grid-cols-7 gap-1 md:gap-1 mb-0 flex-1 h-full select-none">
-
-                {/* Weekdays */}
+            {/* STATIC WEEKDAYS HEADER */}
+            <div className="grid grid-cols-7 gap-1 md:gap-1 mb-1 select-none">
                 {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
                     <div key={i} className="flex items-center justify-center text-[10px] font-medium text-muted-foreground h-6 md:h-auto">
                         {day}
                     </div>
                 ))}
+            </div>
 
+            {/* ANIMATED CALENDAR GRID */}
+            <div
+                key={currentMonth.toISOString()}
+                className={cn(
+                    "grid grid-cols-7 gap-1 md:gap-1 mb-0 flex-1 h-full select-none",
+                    slideDirection === "right" && "animate-in slide-in-from-right-8 fade-in duration-300 ease-out",
+                    slideDirection === "left" && "animate-in slide-in-from-left-8 fade-in duration-300 ease-out"
+                )}
+            >
                 {Array.from({ length: startDayIndex }).map((_, i) => (
                     <div key={`empty-${i}`} />
                 ))}
@@ -211,7 +228,7 @@ export function PnlCalendar({ trades, selectedDate, onSelectDate }: PnlCalendarP
                 })}
             </div>
 
-            {/* Optional: Add a subtle hint for mobile users */}
+            {/* Swipe Hint */}
             <p className="md:hidden text-[10px] text-center text-muted-foreground mt-2 opacity-50">
                 Swipe left/right to change months
             </p>

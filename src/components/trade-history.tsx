@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { format, isSameMonth, isSameYear, isSameWeek, startOfWeek, endOfWeek, addMonths, subMonths, addYears, subYears, addWeeks, subWeeks, isSameDay } from "date-fns"
-import { TradeDialog } from "@/components/trade-dialog" // CHANGED: Using Edit Dialog
+import { TradeDialog } from "@/components/trade-dialog"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -18,8 +18,6 @@ type FilterType = "week" | "month" | "year"
 export function TradeHistory({ trades, focusDate, onClearFocus }: TradeHistoryProps) {
     const [filter, setFilter] = useState<FilterType>("month")
     const [viewDate, setViewDate] = useState(new Date())
-
-    // EDIT STATE
     const [editingTrade, setEditingTrade] = useState<any | null>(null)
 
     // 1. FILTER LOGIC
@@ -60,8 +58,8 @@ export function TradeHistory({ trades, focusDate, onClearFocus }: TradeHistoryPr
         <div className="w-full h-full flex flex-col">
 
             {/* HEADER SECTION */}
-            {/* UI CHANGE: Removed bg-card/border on mobile. Added md: prefixes to restore them on desktop */}
-            <div className="p-0 md:p-6 md:border-b md:bg-card z-10 sticky top-0 bg-transparent">
+            {/* FIX: Changed bg-transparent to bg-background so content doesn't show through */}
+            <div className="p-0 md:p-6 md:border-b md:bg-card z-10 sticky top-0 bg-background/95 backdrop-blur-sm pt-2 pb-4">
                 <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
 
                     {/* LEFT: Net P/L Summary */}
@@ -94,12 +92,10 @@ export function TradeHistory({ trades, focusDate, onClearFocus }: TradeHistoryPr
 
                     {/* RIGHT: Filters or Back Button */}
                     <div className="order-1 md:order-2 flex flex-col gap-2 w-full md:w-auto">
-
                         {!focusDate ? (
                             <>
                                 {/* Filter Toggle */}
-                                {/* UI CHANGE: bg-transparent on mobile, bg-muted/40 on desktop */}
-                                <div className="flex p-1 bg-transparent md:bg-muted/40 rounded-lg w-full md:w-auto md:border md:border-border/50">
+                                <div className="flex p-1 bg-muted/40 rounded-lg w-full md:w-auto md:border md:border-border/50">
                                     {(['week', 'month', 'year'] as const).map((f) => (
                                         <button
                                             key={f}
@@ -107,8 +103,7 @@ export function TradeHistory({ trades, focusDate, onClearFocus }: TradeHistoryPr
                                             className={cn(
                                                 "flex-1 md:px-3 text-[10px] md:text-xs font-medium py-1.5 rounded-md transition-all whitespace-nowrap",
                                                 filter === f
-                                                    // Mobile: Underline or simple bold. Desktop: Boxed
-                                                    ? "text-foreground font-bold border-b-2 border-primary md:border-b-0 md:bg-background md:shadow-sm md:ring-1 md:ring-border/50"
+                                                    ? "text-foreground font-bold bg-background shadow-sm ring-1 ring-border/50"
                                                     : "text-muted-foreground hover:text-foreground"
                                             )}
                                         >
@@ -118,7 +113,7 @@ export function TradeHistory({ trades, focusDate, onClearFocus }: TradeHistoryPr
                                 </div>
 
                                 {/* Date Navigator */}
-                                <div className="flex items-center justify-between md:justify-end bg-transparent md:bg-background md:border rounded-md p-1 md:shadow-sm w-full md:w-auto gap-2">
+                                <div className="flex items-center justify-between md:justify-end bg-muted/40 md:bg-background md:border rounded-md p-1 md:shadow-sm w-full md:w-auto gap-2">
                                     <Button variant="ghost" size="icon" onClick={() => navigate("prev")} className="h-7 w-7 shrink-0">
                                         <ChevronLeft className="h-3 w-3" />
                                     </Button>
@@ -137,7 +132,6 @@ export function TradeHistory({ trades, focusDate, onClearFocus }: TradeHistoryPr
                                 </span>
                             </div>
                         )}
-
                     </div>
                 </div>
             </div>
@@ -159,7 +153,6 @@ export function TradeHistory({ trades, focusDate, onClearFocus }: TradeHistoryPr
                         return (
                             <div
                                 key={trade.id}
-                                // TRIGGER EDIT ON CLICK
                                 onClick={() => setEditingTrade(trade)}
                                 className="flex items-center justify-between py-4 cursor-pointer hover:bg-muted/30 px-2 rounded-md transition-colors"
                             >
@@ -194,7 +187,6 @@ export function TradeHistory({ trades, focusDate, onClearFocus }: TradeHistoryPr
                 )}
             </div>
 
-            {/* REPLACED: View Dialog -> Edit Dialog */}
             <TradeDialog
                 open={!!editingTrade}
                 onOpenChange={(open) => !open && setEditingTrade(null)}
