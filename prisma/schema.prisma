@@ -11,18 +11,18 @@ datasource db {
 
 // 1. Auth.js Models (Required for Login)
 model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String? @db.Text
-  session_state     String?
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String? @db.Text
+  access_token       String? @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String? @db.Text
+  session_state      String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -45,19 +45,18 @@ model User {
   emailVerified DateTime?
   image         String?
   phoneNumber   String?
-  password      String?
+  password      String?   // Optional for Google Login users
   showNetPnl    Boolean   @default(true)
-  
-  accounts      Account[]
-  sessions      Session[]
 
-  isVerified Boolean   @default(false)
-  otp        String?
-  otpExpiry  DateTime?
-  
-  // App Relations
+  isVerified    Boolean   @default(false)
+  otp           String?
+  otpExpiry     DateTime?
+
+  // Relations
+  accounts      Account[] // Required for Google Login
+  sessions      Session[] // Required for Database Sessions
   trades        Trade[]
-  strategies    Strategy[] // <--- THIS WAS MISSING
+  strategies    Strategy[]
 }
 
 // 3. App Models
@@ -69,11 +68,11 @@ model Trade {
   entryPrice Decimal
   exitPrice  Decimal?
   quantity   Int
-  stopLoss    Decimal?  @db.Decimal(10, 2)
+  stopLoss   Decimal? @db.Decimal(10, 2)
   entryDate  DateTime
   status     String   // "OPEN" or "CLOSED"
   pnl        Decimal?
-
+  
   fees       Decimal? @default(0) @db.Decimal(10, 2) // Stores the Brokerage + Taxes
   netPnl     Decimal? @default(0) @db.Decimal(10, 2) // Stores the Final Profit (pnl - fees)
   

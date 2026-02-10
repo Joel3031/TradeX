@@ -64,11 +64,9 @@ export default function LoginPage() {
                     <Image
                         src="/TradeX-logo.svg"
                         alt="TradeX Logo"
-                        width={40}
-                        height={40}
-                        className="h-10 w-10"
+                        width={100}
+                        height={100}
                     />
-                    TradeX
                 </div>
 
                 <div className="relative z-10 space-y-4 max-w-lg">
