@@ -92,7 +92,10 @@ export function AppDashboard({ trades, userEmail, userName, initialShowNetPnl = 
                         </div>
                         <div className="flex items-center gap-3">
                             <ImportTrades />
-                            <ReportDownloader trades={displayTrades} />
+                            <ReportDownloader
+                                trades={displayTrades}
+                                userName={userName}
+                                userEmail={userEmail} />
                             <TabsList>
                                 <TabsTrigger value="overview" className="flex items-center gap-2"><LayoutDashboard className="h-4 w-4" /> Overview</TabsTrigger>
                                 <TabsTrigger value="analytics" className="flex items-center gap-2"><LineChart className="h-4 w-4" /> Analytics</TabsTrigger>
@@ -162,8 +165,8 @@ export function AppDashboard({ trades, userEmail, userName, initialShowNetPnl = 
                                 <button
                                     onClick={() => setAnalyticsView("chart")}
                                     className={`p-2 rounded-md transition-all ${analyticsView === "chart"
-                                            ? "bg-background shadow-sm text-foreground ring-1 ring-border/10"
-                                            : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                                        ? "bg-background shadow-sm text-foreground ring-1 ring-border/10"
+                                        : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
                                         }`}
                                     title="Chart View"
                                 >
@@ -172,8 +175,8 @@ export function AppDashboard({ trades, userEmail, userName, initialShowNetPnl = 
                                 <button
                                     onClick={() => setAnalyticsView("calendar")}
                                     className={`p-2 rounded-md transition-all ${analyticsView === "calendar"
-                                            ? "bg-background shadow-sm text-foreground ring-1 ring-border/10"
-                                            : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                                        ? "bg-background shadow-sm text-foreground ring-1 ring-border/10"
+                                        : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
                                         }`}
                                     title="Calendar View"
                                 >
@@ -278,7 +281,10 @@ export function AppDashboard({ trades, userEmail, userName, initialShowNetPnl = 
                                         <ImportTrades />
                                     </div>
                                     <div className="[&>button]:w-full [&>button]:h-12 [&>button]:justify-start [&>button]:rounded-xl [&>button]:font-medium">
-                                        <ReportDownloader trades={displayTrades} />
+                                        <ReportDownloader
+                                            trades={displayTrades}
+                                            userName={userName}
+                                            userEmail={userEmail} />
                                     </div>
                                 </div>
                             </div>

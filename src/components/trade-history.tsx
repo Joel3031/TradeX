@@ -59,7 +59,7 @@ export function TradeHistory({ trades, focusDate, onClearFocus }: TradeHistoryPr
 
             {/* HEADER SECTION */}
             {/* FIX: Changed bg-transparent to bg-background so content doesn't show through */}
-            <div className="p-0 md:p-6 md:border-b md:bg-card z-10 sticky top-0 bg-background/95 backdrop-blur-sm pt-2 pb-4">
+            <div className="p-0 md:p-6 md:border-b md:bg-card z-10 sticky top-0 backdrop-blur-sm pt-2 pb-4">
                 <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
 
                     {/* LEFT: Net P/L Summary */}
