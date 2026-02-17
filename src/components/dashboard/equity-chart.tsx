@@ -2,17 +2,16 @@
 
 import { useMemo, useState } from "react"
 import {
-    BarChart,
-    Bar,
+    AreaChart,
+    Area,
     XAxis,
     YAxis,
     CartesianGrid,
     Tooltip,
     ResponsiveContainer,
-    ReferenceLine,
-    Cell
+    ReferenceLine
 } from "recharts"
-import { format, subMonths, subYears, isAfter, startOfDay, parseISO } from "date-fns"
+import { format, subMonths, subYears, isAfter } from "date-fns"
 import { cn } from "@/lib/utils"
 
 interface EquityChartProps {
@@ -24,55 +23,58 @@ type TimeRange = "1M" | "1Y" | "ALL"
 export function EquityChart({ trades }: EquityChartProps) {
     const [timeRange, setTimeRange] = useState<TimeRange>("ALL")
 
-    // 1. Process Data: Group by Day instead of Cumulative
-    const { chartData, totalPnl, winRate } = useMemo(() => {
+    const { chartData, totalPnl, winRate, isProfitable } = useMemo(() => {
         const now = new Date()
         let cutoffDate: Date | null = null
 
         if (timeRange === "1M") cutoffDate = subMonths(now, 1)
         if (timeRange === "1Y") cutoffDate = subYears(now, 1)
 
-        // Filter trades by date range
-        const filteredTrades = trades.filter(t => {
-            if (!cutoffDate) return true
-            return isAfter(new Date(t.entryDate), cutoffDate)
-        })
+        // 1. FILTER & SORT
+        const sortedTrades = trades
+            .filter(t => {
+                // FALLBACK: If date is missing, treat as invalid/skip or use current date
+                const dateVal = t.date || t.entryDate
+                if (!dateVal) return false
 
-        // Group PnL by Date
-        const dailyMap = new Map<string, number>()
-        let totalWins = 0
-        let periodTotal = 0
+                if (!cutoffDate) return true
+                return isAfter(new Date(dateVal), cutoffDate)
+            })
+            .sort((a, b) => {
+                // FIX: Fallback to 0 to prevent 'undefined' error in new Date()
+                const dateA = new Date(a.date || a.entryDate || 0).getTime()
+                const dateB = new Date(b.date || b.entryDate || 0).getTime()
+                return dateA - dateB
+            })
 
-        filteredTrades.forEach(trade => {
-            // Normalize date to YYYY-MM-DD to group same-day trades
-            const dateKey = new Date(trade.entryDate).toISOString().split('T')[0]
+        // 2. CALCULATE EQUITY CURVE
+        let runningTotal = 0
+        let wins = 0
+
+        const data = sortedTrades.map(trade => {
             const pnl = Number(trade.pnl) || 0
+            if (pnl > 0) wins++
+            runningTotal += pnl
 
-            // Add to daily total
-            const currentVal = dailyMap.get(dateKey) || 0
-            dailyMap.set(dateKey, currentVal + pnl)
-
-            // Calculate Period Stats
-            periodTotal += pnl
-            if (pnl > 0) totalWins++
+            return {
+                // FIX: Ensure dateStr is always a string. If missing, use current time.
+                dateStr: trade.date || trade.entryDate || new Date().toISOString(),
+                dailyPnl: pnl,
+                equity: runningTotal
+            }
         })
 
-        // Convert Map to Array and Sort by Date
-        const data = Array.from(dailyMap.entries())
-            .map(([dateStr, pnl]) => ({
-                dateStr,
-                pnl
-            }))
-            .sort((a, b) => new Date(a.dateStr).getTime() - new Date(b.dateStr).getTime())
+        const periodTotal = data.length > 0 ? data[data.length - 1].equity : 0
+        const rate = sortedTrades.length > 0 ? (wins / sortedTrades.length) * 100 : 0
 
         return {
             chartData: data,
             totalPnl: periodTotal,
-            winRate: filteredTrades.length > 0 ? (totalWins / filteredTrades.length) * 100 : 0
+            winRate: rate,
+            isProfitable: periodTotal >= 0
         }
     }, [trades, timeRange])
 
-    // 2. Formatters
     const formatXAxis = (dateStr: string) => {
         const date = new Date(dateStr)
         if (isNaN(date.getTime())) return ""
@@ -80,15 +82,15 @@ export function EquityChart({ trades }: EquityChartProps) {
     }
 
     const formatYAxis = (value: number) => {
-        if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(1)}k`
+        if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(0)}k`
         return `${value}`
     }
 
-    const isProfitable = totalPnl >= 0
+    const chartColor = isProfitable ? "#10b981" : "#ef4444"
 
     if (trades.length === 0) {
         return (
-            <div className="h-[250px] flex items-center justify-center border border-dashed rounded-lg">
+            <div className="h-[350px] flex items-center justify-center border border-dashed rounded-lg bg-muted/10">
                 <div className="text-center text-muted-foreground">
                     <p>No trade data available</p>
                     <p className="text-xs">Log your first trade to see the stats.</p>
@@ -98,38 +100,31 @@ export function EquityChart({ trades }: EquityChartProps) {
     }
 
     return (
-        <div className="w-full flex flex-col h-full">
-
-            {/* HEADER SECTION */}
-            <div className="pb-4">
+        <div className="w-full flex flex-col h-full bg-card rounded-xl border shadow-sm p-6">
+            <div className="pb-6">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-
-                    {/* Stats Display */}
                     <div className="space-y-1">
-                        <h3 className="text-sm font-medium text-muted-foreground">
-                            {timeRange === 'ALL' ? 'Net P/L (All Time)' : `Net P/L (${timeRange})`}
+                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                            {timeRange === 'ALL' ? 'Total Account Growth' : `Growth (${timeRange})`}
                         </h3>
-
                         <div className="flex items-baseline gap-2">
-                            <h2 className="text-3xl font-bold tracking-tight">
+                            <h2 className={cn(
+                                "text-3xl font-bold tracking-tight",
+                                isProfitable ? "text-emerald-500" : "text-red-500"
+                            )}>
                                 {totalPnl < 0 ? "-" : ""}₹{Math.abs(totalPnl).toLocaleString('en-IN')}
                             </h2>
                         </div>
-
                         <div className="flex items-center gap-2 pt-1">
-                            <span className={cn(
-                                "text-sm font-medium",
-                                isProfitable ? "text-emerald-500" : "text-red-500"
-                            )}>
-                                {isProfitable ? "+" : ""}{totalPnl.toFixed(2)}
-                                <span className="opacity-70 ml-1 text-foreground">
-                                    ({winRate.toFixed(0)}% Win Rate)
-                                </span>
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                {chartData.length} Trades
+                            </span>
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                {winRate.toFixed(0)}% Win Rate
                             </span>
                         </div>
                     </div>
 
-                    {/* Time Filter Buttons */}
                     <div className="flex items-center p-1 bg-muted/50 rounded-lg border border-border/50 self-start">
                         {(["1M", "1Y", "ALL"] as const).map((range) => (
                             <button
@@ -149,19 +144,18 @@ export function EquityChart({ trades }: EquityChartProps) {
                 </div>
             </div>
 
-            {/* CHART AREA - CHANGED TO BAR CHART */}
-            <div className="h-[250px] w-full -ml-2">
+            <div className="h-[300px] w-full -ml-2">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
-                        <CartesianGrid
-                            strokeDasharray="4 4"
-                            vertical={false}
-                            stroke="currentColor"
-                            className="text-muted/10"
-                        />
+                    <AreaChart data={chartData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+                        <defs>
+                            <linearGradient id="colorEquity" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor={chartColor} stopOpacity={0.3} />
+                                <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
+                            </linearGradient>
+                        </defs>
 
-                        {/* Zero Line to separate Profit/Loss */}
-                        <ReferenceLine y={0} stroke="currentColor" className="text-muted-foreground/20" />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-muted/10" />
+                        <ReferenceLine y={0} stroke="currentColor" className="text-muted-foreground/30" />
 
                         <XAxis
                             dataKey="dateStr"
@@ -171,7 +165,7 @@ export function EquityChart({ trades }: EquityChartProps) {
                             tickFormatter={formatXAxis}
                             className="text-muted-foreground"
                             dy={10}
-                            minTickGap={30}
+                            minTickGap={40}
                         />
 
                         <YAxis
@@ -184,23 +178,35 @@ export function EquityChart({ trades }: EquityChartProps) {
                         />
 
                         <Tooltip
-                            cursor={{ fill: 'currentColor', opacity: 0.05 }}
-                            content={({ active, payload }) => {
+                            content={({ active, payload, label }) => {
                                 if (active && payload && payload.length) {
                                     const data = payload[0].payload
-                                    const dateLabel = format(new Date(data.dateStr), "MMM dd, yyyy")
-                                    const isWin = data.pnl >= 0
+
+                                    // FIX: Ensure label exists before formatting. Fallback to empty string or current date.
+                                    // We use (label || "") to satisfy TypeScript, though practically it's always a string here.
+                                    const dateObj = new Date(label || new Date())
+                                    const dateLabel = !isNaN(dateObj.getTime()) ? format(dateObj, "MMM dd, yyyy") : "N/A"
+
+                                    const isPos = data.equity >= 0
 
                                     return (
-                                        <div className="bg-popover text-popover-foreground text-xs rounded-lg py-2 px-3 shadow-xl border border-border">
-                                            <div className="text-muted-foreground mb-1">
+                                        <div className="bg-popover/95 backdrop-blur-sm text-popover-foreground text-xs rounded-lg py-2 px-3 shadow-xl border border-border">
+                                            <div className="text-muted-foreground mb-1 border-b pb-1">
                                                 {dateLabel}
                                             </div>
-                                            <div className={cn(
-                                                "font-semibold text-sm",
-                                                isWin ? "text-emerald-500" : "text-red-500"
-                                            )}>
-                                                {data.pnl >= 0 ? "+" : ""}₹{data.pnl.toLocaleString('en-IN')}
+                                            <div className="space-y-1 pt-1">
+                                                <div className="flex justify-between gap-4">
+                                                    <span>Daily P&L:</span>
+                                                    <span className={data.dailyPnl >= 0 ? "text-emerald-500" : "text-red-500"}>
+                                                        {data.dailyPnl >= 0 ? "+" : ""}₹{data.dailyPnl.toLocaleString()}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between gap-4 font-bold">
+                                                    <span>Total Equity:</span>
+                                                    <span style={{ color: chartColor }}>
+                                                        {isPos ? "+" : ""}₹{data.equity.toLocaleString()}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     )
@@ -209,17 +215,16 @@ export function EquityChart({ trades }: EquityChartProps) {
                             }}
                         />
 
-                        <Bar dataKey="pnl" radius={[4, 4, 0, 0]} maxBarSize={50}>
-                            {chartData.map((entry, index) => (
-                                <Cell
-                                    key={`cell-${index}`}
-                                    fill={entry.pnl >= 0 ? "#10b981" : "#ef4444"}
-                                    // Add slight opacity to make it look modern
-                                    fillOpacity={0.9}
-                                />
-                            ))}
-                        </Bar>
-                    </BarChart>
+                        <Area
+                            type="monotone"
+                            dataKey="equity"
+                            stroke={chartColor}
+                            strokeWidth={2}
+                            fillOpacity={1}
+                            fill="url(#colorEquity)"
+                            activeDot={{ r: 4, strokeWidth: 0 }}
+                        />
+                    </AreaChart>
                 </ResponsiveContainer>
             </div>
         </div>
