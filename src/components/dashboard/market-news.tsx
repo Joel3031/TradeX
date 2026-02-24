@@ -60,14 +60,9 @@ export function MarketNews() {
         try {
             setError(false);
 
-            // Replace with your actual GNews API key
-            const API_KEY = '597a4a55ad27440a287095c9df195396';
-
             // country=in gets Indian news. Change to 'us' or 'gb' for other regions, 
             // or remove the country parameter entirely for global business news.
-            const response = await fetch(
-                `https://gnews.io/api/v4/top-headlines?category=business&lang=en&country=in&max=12&apikey=${API_KEY}`
-            );
+            const response = await fetch('/api/news');
 
             const data = await response.json();
 
