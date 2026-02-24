@@ -317,7 +317,7 @@ export function ReportDownloader({ trades, userName, userEmail }: ReportDownload
             <DialogTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1">
                     <Download className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Export Data</span>
+                    <span className="hidden sm:inline">Export</span>
                     <span className="sm:hidden">Export</span>
                 </Button>
             </DialogTrigger>

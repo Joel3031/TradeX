@@ -85,21 +85,52 @@ export function AppDashboard({ trades, userEmail, userName, initialShowNetPnl = 
                     <div className="flex items-center justify-between">
                         <div>
                             <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-                            {/* Show current mode in header */}
                             <p className="text-muted-foreground">
                                 Viewing: <span className="font-semibold text-foreground">{showNetPnl ? "Net P&L (After Tax)" : "Gross P&L (Before Tax)"}</span>
                             </p>
                         </div>
                         <div className="flex items-center gap-3">
-                            <ImportTrades />
+                            {/* <ImportTrades />
                             <ReportDownloader
                                 trades={displayTrades}
                                 userName={userName}
-                                userEmail={userEmail} />
-                            <TabsList>
-                                <TabsTrigger value="overview" className="flex items-center gap-2"><LayoutDashboard className="h-4 w-4" /> Overview</TabsTrigger>
-                                <TabsTrigger value="analytics" className="flex items-center gap-2"><LineChart className="h-4 w-4" /> Analytics</TabsTrigger>
-                                <TabsTrigger value="news" className="flex items-center gap-2"><Newspaper className="h-4 w-4" /> News</TabsTrigger>
+                                userEmail={userEmail}
+                            /> */}
+
+                            {/* Linear-Style Tabs - No Box, Bottom Border Only + Glow */}
+                            <TabsList className="flex w-full justify-start border-b border-border bg-transparent p-0 h-auto gap-6 ml-4" style={{ backgroundColor: "transparent" }}>
+                                <TabsTrigger
+                                    value="overview"
+                                    style={{ backgroundColor: "transparent", boxShadow: "none" }}
+                                    className="group relative flex items-center gap-2 rounded-none border-transparent border-t-0 border-x-0 border-b-2 px-2 py-3 text-sm font-medium text-muted-foreground shadow-none outline-none transition-all duration-300 ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-0 data-[state=active]:!border-green-500 data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none -mb-[1px] overflow-hidden z-10"
+                                >
+                                    {/* Green Glow */}
+                                    <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-green-500/25 to-transparent opacity-0 transition-opacity duration-300 ease-out group-data-[state=active]:opacity-100 pointer-events-none" />
+
+                                    {/* Animated Icon */}
+                                    <LayoutDashboard className="h-4 w-4 relative z-10 transition-transform duration-300 ease-out group-data-[state=active]:scale-110" />
+                                    <span className="relative z-10">Overview</span>
+                                </TabsTrigger>
+
+                                <TabsTrigger
+                                    value="analytics"
+                                    style={{ backgroundColor: "transparent", boxShadow: "none" }}
+                                    className="group relative flex items-center gap-2 rounded-none border-transparent border-t-0 border-x-0 border-b-2 px-2 py-3 text-sm font-medium text-muted-foreground shadow-none outline-none transition-all duration-300 ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-0 data-[state=active]:!border-green-500 data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none -mb-[1px] overflow-hidden z-10"
+                                >
+                                    <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-green-500/25 to-transparent opacity-0 transition-opacity duration-300 ease-out group-data-[state=active]:opacity-100 pointer-events-none" />
+                                    <LineChart className="h-4 w-4 relative z-10 transition-transform duration-300 ease-out group-data-[state=active]:scale-110" />
+                                    <span className="relative z-10">Analytics</span>
+                                </TabsTrigger>
+
+                                <TabsTrigger
+                                    value="news"
+                                    style={{ backgroundColor: "transparent", boxShadow: "none" }}
+                                    className="group relative flex items-center gap-2 rounded-none border-transparent border-t-0 border-x-0 border-b-2 px-2 py-3 text-sm font-medium text-muted-foreground shadow-none outline-none transition-all duration-300 ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-0 data-[state=active]:!border-green-500 data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none -mb-[1px] overflow-hidden z-10"
+                                >
+                                    <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-green-500/25 to-transparent opacity-0 transition-opacity duration-300 ease-out group-data-[state=active]:opacity-100 pointer-events-none" />
+                                    <Newspaper className="h-4 w-4 relative z-10 transition-transform duration-300 ease-out group-data-[state=active]:scale-110" />
+                                    <span className="relative z-10">News</span>
+                                </TabsTrigger>
                             </TabsList>
                         </div>
                     </div>
@@ -128,10 +159,8 @@ export function AppDashboard({ trades, userEmail, userName, initialShowNetPnl = 
                     <TabsContent value="analytics" className="space-y-4 animate-in fade-in-50 duration-500">
                         <EquityChart trades={displayTrades} />
                     </TabsContent>
-                    <TabsContent value="news" className="space-y-4 animate-in fade-in-50 duration-500">
-                        <div className="bg-card rounded-xl border shadow-sm p-6">
-                            <MarketNews />
-                        </div>
+                    <TabsContent value="news" className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
+                        <MarketNews />
                     </TabsContent>
                 </Tabs>
             </div>
@@ -276,15 +305,16 @@ export function AppDashboard({ trades, userEmail, userName, initialShowNetPnl = 
 
                             <div className="space-y-3">
                                 <h4 className="text-xs uppercase text-muted-foreground font-semibold tracking-wider ml-1">Data Management</h4>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="[&>button]:w-full [&>button]:h-12 [&>button]:justify-start [&>button]:rounded-xl [&>button]:font-medium">
+                                <div className="flex justify-around gap-4">
+                                    <div className="w-full max-w-[180px] [&>button]:w-full [&>button]:h-12 [&>button]:justify-center [&>button]:rounded-xl [&>button]:font-medium">
                                         <ImportTrades />
                                     </div>
-                                    <div className="[&>button]:w-full [&>button]:h-12 [&>button]:justify-start [&>button]:rounded-xl [&>button]:font-medium">
+                                    <div className="w-full max-w-[180px] [&>button]:w-full [&>button]:h-12 [&>button]:justify-center [&>button]:rounded-xl [&>button]:font-medium">
                                         <ReportDownloader
                                             trades={displayTrades}
                                             userName={userName}
-                                            userEmail={userEmail} />
+                                            userEmail={userEmail}
+                                        />
                                     </div>
                                 </div>
                             </div>

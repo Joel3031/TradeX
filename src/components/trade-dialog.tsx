@@ -258,7 +258,6 @@ function TradeForm({ setOpen, className, initialData }: { setOpen: (open: boolea
                     type="number"
                     step="0.05"
                     placeholder="0.00"
-                    required
                     defaultValue={initialData?.stopLoss}
                 />
             </div>
