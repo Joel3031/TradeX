@@ -28,9 +28,16 @@ export function TradeDialog({ trigger, tradeToEdit, open: controlledOpen, onOpen
     const setIsOpen = onOpenChange || setInternalOpen
 
     const DefaultTrigger = (
-        <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
-            <Plus className="mr-1 h-4 w-4" />
-            Log Trade
+        <Button className="group flex items-center !p-0 h-10 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-md transition-all duration-300 ease-in-out overflow-hidden">
+            {/* Fixed-size container guarantees the icon is 100% centered when collapsed */}
+            <div className="flex items-center justify-center w-10 h-10 shrink-0">
+                <Plus className="h-5 w-5" />
+            </div>
+
+            {/* Text expands outward on hover */}
+            <span className="max-w-0 opacity-0 overflow-hidden whitespace-nowrap transition-all duration-300 ease-in-out group-hover:max-w-[100px] group-hover:opacity-100 group-hover:pr-5 font-medium">
+                Add Trade
+            </span>
         </Button>
     )
 
