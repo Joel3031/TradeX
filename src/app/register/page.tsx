@@ -144,7 +144,7 @@ export default function RegisterPage() {
 
                 {/* Logo */}
                 <div className="relative z-10 flex items-center gap-3 font-bold text-2xl tracking-tight">
-                    <Image src="/TradeX-logo.svg" alt="TradeX Logo" width={100} height={100} />
+                    <Image src="/TradeX-logo.png" alt="TradeX Logo" width={100} height={100} />
                 </div>
 
                 {/* Quote Content */}

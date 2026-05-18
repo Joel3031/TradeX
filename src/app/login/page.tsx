@@ -62,7 +62,7 @@ export default function LoginPage() {
 
                 <div className="relative z-10 flex items-center gap-3 font-bold text-2xl tracking-tight">
                     <Image
-                        src="/TradeX-logo.svg"
+                        src="/TradeX-logo.png"
                         alt="TradeX Logo"
                         width={100}
                         height={100}
@@ -92,7 +92,7 @@ export default function LoginPage() {
                         {/* Logo visible on mobile now */}
                         <div className="lg:hidden mb-4 p-3 bg-zinc-100 dark:bg-zinc-900 rounded-2xl shadow-sm">
                             <Image
-                                src="/TradeX-logo.svg"
+                                src="/TradeX-logo.png"
                                 alt="TradeX Logo"
                                 width={48}
                                 height={48}

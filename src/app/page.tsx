@@ -68,7 +68,7 @@ export default async function Home() {
           <div className="flex justify-center">
             <div className="relative h-8 w-28 md:h-10 md:w-40">
               <Image
-                src="/TradeX-logo.svg"
+                src="/TradeX-logo.png"
                 alt="TradeX"
                 fill
                 className="object-contain dark:invert dark:hue-rotate-180"
