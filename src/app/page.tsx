@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/db"
 import { auth } from "@/auth"
 import { TradeDialog } from "@/components/trade-dialog"
-import { AppDashboard } from "@/components/app-dashboard"
 import { UserProfileMenu } from "@/components/user-profile-menu"
+import { DesktopDashboard } from "@/components/desktop-dashboard"
+import { MobileDashboard } from "@/components/mobile-dashboard"
 import { redirect } from "next/navigation"
 import Image from "next/image"
 
@@ -15,7 +16,6 @@ export default async function Home() {
     redirect("/login")
   }
 
-  // 1. FETCH USER SETTINGS (Include showNetPnl)
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { showNetPnl: true, email: true, name: true }
@@ -26,14 +26,10 @@ export default async function Home() {
     orderBy: { entryDate: 'desc' }
   })
 
-  // 2. PREPARE DATA
   const trades = rawTrades.map(trade => {
-    // Helper to ensure numbers
     const grossVal = trade.pnl ? Number(trade.pnl) : 0
     const netVal = trade.netPnl ? Number(trade.netPnl) : 0
     const feesVal = trade.fees ? Number(trade.fees) : 0
-
-    // Determine default display value based on user preference
     const defaultPnl = user?.showNetPnl ? netVal : grossVal
 
     return {
@@ -42,25 +38,25 @@ export default async function Home() {
       exitPrice: trade.exitPrice ? Number(trade.exitPrice) : null,
       stopLoss: Number(trade.stopLoss),
       quantity: Number(trade.quantity),
-
-      // We pass the default preference to 'pnl' for initial render
       pnl: defaultPnl,
-
-      // CRITICAL: We pass raw values so the UI can swap them later
       grossPnl: grossVal,
       netPnl: netVal,
       fees: feesVal,
     }
   })
 
+  const dashboardProps = {
+    trades,
+    userEmail: session.user.email || undefined,
+    userName: session.user.name || undefined,
+    initialShowNetPnl: user?.showNetPnl ?? true
+  }
+
   return (
     <main className="min-h-screen bg-zinc-50 dark:bg-zinc-950 relative">
-      {/* ... Background Div ... */}
-      <div
-        className="absolute top-0 left-0 w-full h-[600px] bg-gradient-to-b from-emerald-500/10 via-transparent to-transparent dark:from-emerald-500/10 dark:via-transparent dark:to-transparent pointer-events-none z-0"
-      />
+      <div className="absolute top-0 left-0 w-full h-[600px] bg-gradient-to-b from-emerald-500/10 via-transparent to-transparent dark:from-emerald-500/10 dark:via-transparent dark:to-transparent pointer-events-none z-0" />
 
-      {/* Header */}
+      {/* FIXED TOP HEADER BAR FOR DESKTOP */}
       <div className="fixed top-0 left-0 right-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md shadow-sm">
         <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 grid grid-cols-3 items-center">
           <div className="flex justify-start" />
@@ -90,14 +86,14 @@ export default async function Home() {
         </div>
       </div>
 
-      <div className="relative z-10 w-full flex justify-center pt-20">
-        <AppDashboard
-          trades={trades}
-          userEmail={session.user.email || undefined}
-          userName={session.user.name || undefined}
-          // PASS THE PREFERENCE TO THE UI
-          initialShowNetPnl={user?.showNetPnl ?? true}
-        />
+      {/* Renders Desktop Dashboard on medium screens and up */}
+      <div className="hidden md:block relative z-10 pt-20">
+        <DesktopDashboard {...dashboardProps} />
+      </div>
+
+      {/* Renders Mobile Dashboard on smaller screens */}
+      <div className="block md:hidden relative z-10">
+        <MobileDashboard {...dashboardProps} />
       </div>
     </main>
   )

@@ -250,14 +250,14 @@ export function AppDashboard({ trades, userEmail, userName, initialShowNetPnl = 
                                 <div className="h-[1px] w-full bg-border/40" />
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-lg">Recent Executions</h3>
-                                    <div className="bg-card rounded-xl border shadow-sm p-0 overflow-hidden h-[320px]">
+                                    <div className="bg-transparent border-none shadow-none p-0 p-0 overflow-hidden h-[320px]">
                                         <TradeHistory trades={displayTrades} focusDate={focusDate} onClearFocus={() => setFocusDate(null)} />
                                     </div>
                                 </div>
                             </div>
                             <div className="space-y-4 flex flex-col h-full">
                                 <h3 className="font-semibold text-lg">P/L Calendar</h3>
-                                <div className="bg-card rounded-xl border shadow-sm p-6 flex-1 flex flex-col">
+                                <div className="bg-transparent border-none shadow-none p-0 p-6 flex-1 flex flex-col">
                                     <PnlCalendar trades={displayTrades} selectedDate={focusDate} onSelectDate={setFocusDate} />
                                 </div>
                             </div>

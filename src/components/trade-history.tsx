@@ -59,7 +59,7 @@ export function TradeHistory({ trades, focusDate, onClearFocus }: TradeHistoryPr
 
             {/* HEADER SECTION */}
             {/* FIX: Changed bg-transparent to bg-background so content doesn't show through */}
-            <div className="p-0 md:p-6 md:border-b md:bg-card z-10 sticky top-0 backdrop-blur-sm pt-2 pb-4">
+            <div className="p-0 md:p-6 md:border-b md:bg-transparent z-10 sticky top-0 backdrop-blur-sm pt-2 pb-4">
                 <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
 
                     {/* LEFT: Net P/L Summary */}
@@ -95,7 +95,7 @@ export function TradeHistory({ trades, focusDate, onClearFocus }: TradeHistoryPr
                         {!focusDate ? (
                             <>
                                 {/* Filter Toggle */}
-                                <div className="flex p-1 bg-muted/40 rounded-lg w-full md:w-auto md:border md:border-border/50">
+                                <div className="flex p-1 bg-transparent rounded-lg w-full md:w-auto md:border md:border-border/50">
                                     {(['week', 'month', 'year'] as const).map((f) => (
                                         <button
                                             key={f}
@@ -113,7 +113,7 @@ export function TradeHistory({ trades, focusDate, onClearFocus }: TradeHistoryPr
                                 </div>
 
                                 {/* Date Navigator */}
-                                <div className="flex items-center justify-between md:justify-end bg-muted/40 md:bg-background md:border rounded-md p-1 md:shadow-sm w-full md:w-auto gap-2">
+                                <div className="flex items-center justify-between md:justify-end bg-transparent md:bg-background md:border rounded-md p-1 md:shadow-sm w-full md:w-auto gap-2">
                                     <Button variant="ghost" size="icon" onClick={() => navigate("prev")} className="h-7 w-7 shrink-0">
                                         <ChevronLeft className="h-3 w-3" />
                                     </Button>

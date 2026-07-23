@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import {
     AreaChart,
     Area,
@@ -11,43 +11,23 @@ import {
     ResponsiveContainer,
     ReferenceLine
 } from "recharts"
-import { format, subMonths, subYears, isAfter } from "date-fns"
+import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 
 interface EquityChartProps {
     trades: any[]
+    timeRange?: "1M" | "1Y" | "ALL"
 }
 
-type TimeRange = "1M" | "1Y" | "ALL"
-
-export function EquityChart({ trades }: EquityChartProps) {
-    const [timeRange, setTimeRange] = useState<TimeRange>("ALL")
-
+export function EquityChart({ trades, timeRange = "ALL" }: EquityChartProps) {
     const { chartData, totalPnl, winRate, isProfitable } = useMemo(() => {
-        const now = new Date()
-        let cutoffDate: Date | null = null
+        // Trades are already filtered by the parent component, sort them chronologically
+        const sortedTrades = [...trades].sort((a, b) => {
+            const dateA = new Date(a.date || a.entryDate || 0).getTime()
+            const dateB = new Date(b.date || b.entryDate || 0).getTime()
+            return dateA - dateB
+        })
 
-        if (timeRange === "1M") cutoffDate = subMonths(now, 1)
-        if (timeRange === "1Y") cutoffDate = subYears(now, 1)
-
-        // 1. FILTER & SORT
-        const sortedTrades = trades
-            .filter(t => {
-                // FALLBACK: If date is missing, treat as invalid/skip or use current date
-                const dateVal = t.date || t.entryDate
-                if (!dateVal) return false
-
-                if (!cutoffDate) return true
-                return isAfter(new Date(dateVal), cutoffDate)
-            })
-            .sort((a, b) => {
-                // FIX: Fallback to 0 to prevent 'undefined' error in new Date()
-                const dateA = new Date(a.date || a.entryDate || 0).getTime()
-                const dateB = new Date(b.date || b.entryDate || 0).getTime()
-                return dateA - dateB
-            })
-
-        // 2. CALCULATE EQUITY CURVE
         let runningTotal = 0
         let wins = 0
 
@@ -57,7 +37,6 @@ export function EquityChart({ trades }: EquityChartProps) {
             runningTotal += pnl
 
             return {
-                // FIX: Ensure dateStr is always a string. If missing, use current time.
                 dateStr: trade.date || trade.entryDate || new Date().toISOString(),
                 dailyPnl: pnl,
                 equity: runningTotal
@@ -73,7 +52,7 @@ export function EquityChart({ trades }: EquityChartProps) {
             winRate: rate,
             isProfitable: periodTotal >= 0
         }
-    }, [trades, timeRange])
+    }, [trades])
 
     const formatXAxis = (dateStr: string) => {
         const date = new Date(dateStr)
@@ -100,10 +79,10 @@ export function EquityChart({ trades }: EquityChartProps) {
     }
 
     return (
-        <div className="w-full flex flex-col h-full bg-card rounded-xl border shadow-sm p-6">
-            <div className="pb-6">
+        <div className="w-full flex flex-col h-full bg-transparent p-0">
+            <div className="pb-4">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                    <div className="space-y-1">
+                    {/* <div className="space-y-1">
                         <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
                             {timeRange === 'ALL' ? 'Total Account Growth' : `Growth (${timeRange})`}
                         </h3>
@@ -123,24 +102,16 @@ export function EquityChart({ trades }: EquityChartProps) {
                                 {winRate.toFixed(0)}% Win Rate
                             </span>
                         </div>
-                    </div>
+                    </div> */}
 
+                    {/* LOCAL GRAPH FILTER BUTTONS COMMENTED OUT (Controlled globally from top header now) */}
+                    {/* 
                     <div className="flex items-center p-1 bg-muted/50 rounded-lg border border-border/50 self-start">
                         {(["1M", "1Y", "ALL"] as const).map((range) => (
-                            <button
-                                key={range}
-                                onClick={() => setTimeRange(range)}
-                                className={cn(
-                                    "px-3 py-1 text-xs font-medium rounded-md transition-all",
-                                    timeRange === range
-                                        ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
-                                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                                )}
-                            >
-                                {range}
-                            </button>
+                            <button key={range} ...>{range}</button>
                         ))}
-                    </div>
+                    </div> 
+                    */}
                 </div>
             </div>
 
@@ -181,12 +152,8 @@ export function EquityChart({ trades }: EquityChartProps) {
                             content={({ active, payload, label }) => {
                                 if (active && payload && payload.length) {
                                     const data = payload[0].payload
-
-                                    // FIX: Ensure label exists before formatting. Fallback to empty string or current date.
-                                    // We use (label || "") to satisfy TypeScript, though practically it's always a string here.
                                     const dateObj = new Date(label || new Date())
                                     const dateLabel = !isNaN(dateObj.getTime()) ? format(dateObj, "MMM dd, yyyy") : "N/A"
-
                                     const isPos = data.equity >= 0
 
                                     return (
