@@ -476,7 +476,7 @@ export function AppDashboard({ trades, userEmail, userName, initialShowNetPnl = 
                                     </div>
                                     <h3 className="font-medium text-foreground">Ask anything about the chart</h3>
 
-                                    <div className="flex flex-col gap-3 w-full max-w-xs mt-8 items-end">
+                                    <div className="flex flex-col gap-3 w-full max-w-xs mt-8">
                                         <button onClick={() => handleAiSubmit("What's the probable trajectory?")} className="bg-card hover:bg-muted text-sm py-2.5 px-5 rounded-full text-foreground border shadow-sm transition-colors">
                                             What's the probable trajectory?
                                         </button>

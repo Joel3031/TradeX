@@ -23,8 +23,7 @@ export default async function Home() {
 
   const rawTrades = await prisma.trade.findMany({
     where: { userId: session.user.id },
-    orderBy: { entryDate: 'desc' },
-    take: 100
+    orderBy: { entryDate: 'desc' }
   })
 
   // 2. PREPARE DATA

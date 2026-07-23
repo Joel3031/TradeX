@@ -114,22 +114,28 @@ export async function createTrade(formData: any) {
     const userId = session.user.id
 
     try {
-        const stopLossValue = formData.stopLoss && formData.stopLoss.toString().trim() !== ""
-            ? parseFloat(formData.stopLoss)
-            : 0;
-
+        // Safely parse base numbers
+        const stopLossValue = formData.stopLoss && formData.stopLoss.toString().trim() !== "" ? parseFloat(formData.stopLoss) : null;
         const entryPriceValue = parseFloat(formData.entryPrice);
-        const exitPriceValue = parseFloat(formData.exitPrice);
+        const exitPriceValue = formData.exitPrice != null && formData.exitPrice !== "" ? parseFloat(formData.exitPrice) : null;
         const quantityValue = parseInt(formData.quantity);
 
-        // Capture Fees and Net PnL passed from the form
-        const feesValue = formData.fees ? parseFloat(formData.fees) : 0;
-        // Default Net PnL to 0 if not provided
-        let netPnlValue = formData.netPnl ? parseFloat(formData.netPnl) : 0;
+        // Capture Fees and Net PnL securely
+        const feesValue = formData.fees != null ? parseFloat(formData.fees) : 0;
+        let netPnlValue = formData.netPnl != null ? parseFloat(formData.netPnl) : null;
 
-        // Calculate Gross PnL (Logic retained for safety)
+        // Extract new fields for Options/Delivery
+        const category = formData.category || "INTRADAY";
+        const optionType = formData.optionType || null;
+        const strike = formData.strike != null && formData.strike !== "" ? parseFloat(formData.strike) : null;
+        const expiryDate = formData.expiryDate ? new Date(formData.expiryDate) : null;
+        const exitDate = formData.exitDate ? new Date(formData.exitDate) : null;
+        const notes = formData.notes || null;
+
+        const status = exitPriceValue !== null ? "CLOSED" : "OPEN";
         let pnl = null;
-        if (formData.exitPrice) {
+
+        if (exitPriceValue !== null) {
             if (formData.type === "BUY") {
                 pnl = (exitPriceValue - entryPriceValue) * quantityValue;
             } else {
@@ -137,7 +143,7 @@ export async function createTrade(formData: any) {
             }
 
             // Fallback: If form didn't send Net PnL, calculate it here
-            if (!formData.netPnl && pnl !== null) {
+            if (netPnlValue === null && pnl !== null) {
                 netPnlValue = pnl - feesValue;
             }
         }
@@ -152,10 +158,18 @@ export async function createTrade(formData: any) {
                 quantity: quantityValue,
                 stopLoss: stopLossValue,
                 entryDate: new Date(formData.date),
-                pnl: pnl,        // Gross P&L
-                fees: feesValue, // Tax & Charges
-                netPnl: netPnlValue, // Final Profit
-                status: "CLOSED"
+                pnl: pnl,
+                fees: feesValue,
+                netPnl: netPnlValue,
+                status: status, // Fixed: Now correctly registers "OPEN" trades
+
+                // New Fields
+                category,
+                optionType,
+                strike,
+                expiryDate,
+                exitDate,
+                notes
             },
         })
 
@@ -183,27 +197,35 @@ export async function updateTrade(data: any) {
             return { success: false, error: "Trade not found or unauthorized" }
         }
 
-        const stopLossValue = data.stopLoss && data.stopLoss.toString().trim() !== ""
-            ? parseFloat(data.stopLoss)
-            : 0;
-
+        // Safely parse base numbers
+        const stopLossValue = data.stopLoss && data.stopLoss.toString().trim() !== "" ? parseFloat(data.stopLoss) : null;
         const entryPriceValue = parseFloat(data.entryPrice);
-        const exitPriceValue = parseFloat(data.exitPrice);
+        const exitPriceValue = data.exitPrice != null && data.exitPrice !== "" ? parseFloat(data.exitPrice) : null;
         const quantityValue = parseInt(data.quantity);
 
-        // Capture Fees and Net PnL
-        const feesValue = data.fees ? parseFloat(data.fees) : 0;
-        let netPnlValue = data.netPnl ? parseFloat(data.netPnl) : 0;
+        // Capture Fees and Net PnL securely
+        const feesValue = data.fees != null ? parseFloat(data.fees) : 0;
+        let netPnlValue = data.netPnl != null ? parseFloat(data.netPnl) : null;
 
+        // Extract new fields for Options/Delivery
+        const category = data.category || "INTRADAY";
+        const optionType = data.optionType || null;
+        const strike = data.strike != null && data.strike !== "" ? parseFloat(data.strike) : null;
+        const expiryDate = data.expiryDate ? new Date(data.expiryDate) : null;
+        const exitDate = data.exitDate ? new Date(data.exitDate) : null;
+        const notes = data.notes || null;
+
+        const status = exitPriceValue !== null ? "CLOSED" : "OPEN";
         let pnl = null;
-        if (data.exitPrice) {
+
+        if (exitPriceValue !== null) {
             if (data.type === "BUY") {
                 pnl = (exitPriceValue - entryPriceValue) * quantityValue;
             } else {
                 pnl = (entryPriceValue - exitPriceValue) * quantityValue;
             }
 
-            if (!data.netPnl && pnl !== null) {
+            if (netPnlValue === null && pnl !== null) {
                 netPnlValue = pnl - feesValue;
             }
         }
@@ -220,7 +242,16 @@ export async function updateTrade(data: any) {
                 entryDate: new Date(data.date),
                 pnl: pnl,
                 fees: feesValue,
-                netPnl: netPnlValue
+                netPnl: netPnlValue,
+                status: status,
+
+                // New Fields
+                category,
+                optionType,
+                strike,
+                expiryDate,
+                exitDate,
+                notes
             },
         })
 
@@ -269,10 +300,11 @@ export async function importTrades(tradesData: any[]) {
                 quantity: quantity,
                 stopLoss: t.stopLoss ? parseFloat(t.stopLoss) : 0,
                 entryDate: new Date(t.date),
-                pnl: pnl,         // Gross PnL
-                fees: fees,       // Tax
-                netPnl: netPnl,   // Net PnL
-                status: exitPrice ? "CLOSED" : "OPEN"
+                pnl: pnl,        // Gross PnL
+                fees: fees,      // Tax
+                netPnl: netPnl,  // Net PnL
+                status: exitPrice ? "CLOSED" : "OPEN",
+                category: t.category || "INTRADAY" // Defaults imports to Intraday
             }
         })
 

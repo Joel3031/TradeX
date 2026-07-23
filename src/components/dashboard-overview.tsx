@@ -8,10 +8,15 @@ interface DashboardOverviewProps {
 }
 
 export function DashboardOverview({ trades }: DashboardOverviewProps) {
-    const totalTrades = trades.length
-    const winningTrades = trades.filter(t => (t.pnl || 0) > 0).length
+    // 1. Filter out OPEN trades so they don't drag down the win rate
+    const closedTrades = trades.filter(t => t.status === "CLOSED" || t.exitPrice !== null)
+
+    // 2. Safely parse numbers and prioritize Net PnL over Gross PnL
+    const totalTrades = closedTrades.length
+    const winningTrades = closedTrades.filter(t => Number(t.netPnl ?? t.pnl ?? 0) > 0).length
     const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0
-    const netPnl = trades.reduce((sum, t) => sum + (t.pnl || 0), 0)
+    const netPnl = closedTrades.reduce((sum, t) => sum + Number(t.netPnl ?? t.pnl ?? 0), 0)
+
     const isProfitable = netPnl >= 0
 
     return (
@@ -30,7 +35,7 @@ export function DashboardOverview({ trades }: DashboardOverviewProps) {
                     </div>
                     <div className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isProfitable ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"}`}>
                         {isProfitable ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}
-                        {totalTrades} Trades (All Time)
+                        {totalTrades} Closed Trades
                     </div>
                 </div>
                 <div className="flex w-full max-w-[280px] justify-between items-center px-4 pt-2">
