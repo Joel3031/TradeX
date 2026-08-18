@@ -1,5 +1,10 @@
 // src/lib/tax-calculator.ts
 
+export interface Execution {
+    price: number;
+    quantity: number;
+}
+
 export interface TaxResult {
     turnover: number;
     grossPnl: number;
@@ -14,33 +19,44 @@ export interface TaxResult {
 }
 
 export function calculateIntradayCharges(
-    entryPrice: number,
-    exitPrice: number,
-    quantity: number,
-    type: "BUY" | "SELL",
-    executedOrders: number = 2 // Added to handle partial fills (e.g., 3 orders in contract note)
+    entries: Execution[],
+    exits: Execution[],
+    type: "BUY" | "SELL"
 ): TaxResult {
-    const buyPrice = type === "BUY" ? entryPrice : exitPrice;
-    const sellPrice = type === "BUY" ? exitPrice : entryPrice;
+    const buyLegs = type === "BUY" ? entries : exits;
+    const sellLegs = type === "BUY" ? exits : entries;
 
-    const buyTurnover = buyPrice * quantity;
-    const sellTurnover = sellPrice * quantity;
+    let buyTurnover = 0;
+    let sellTurnover = 0;
+    let totalBrokerageRaw = 0;
+
+    // Calculate Turnover & Brokerage for Buy Legs
+    for (const leg of buyLegs) {
+        if (leg.price > 0 && leg.quantity > 0) {
+            const turnover = leg.price * leg.quantity;
+            buyTurnover += turnover;
+            totalBrokerageRaw += Math.min(20, turnover * 0.0003); // Charge per execution
+        }
+    }
+
+    // Calculate Turnover & Brokerage for Sell Legs
+    for (const leg of sellLegs) {
+        if (leg.price > 0 && leg.quantity > 0) {
+            const turnover = leg.price * leg.quantity;
+            sellTurnover += turnover;
+            totalBrokerageRaw += Math.min(20, turnover * 0.0003); // Charge per execution
+        }
+    }
+
     const totalTurnover = buyTurnover + sellTurnover;
-
-    // Fixed: Brokerage scales with actual executed orders to catch partial fill fees
-    const avgOrderTurnover = totalTurnover / executedOrders;
-    const totalBrokerageRaw = Math.min(20, avgOrderTurnover * 0.0003) * executedOrders;
     const totalBrokerage = parseFloat(totalBrokerageRaw.toFixed(2));
 
-    // Fixed: STT is maintained to two decimals (40.10 in contract note), not integer-rounded
     const sttRaw = sellTurnover * 0.00025;
     const stt = parseFloat(sttRaw.toFixed(2));
 
-    // Refined precision for exchange transaction fee
     const exchangeTxnRaw = totalTurnover * 0.00003071;
     const exchangeTxn = parseFloat(exchangeTxnRaw.toFixed(2));
 
-    // Fixed: Stamp Duty was 0.000003 (0.0003%), corrected to 0.00003 (0.003%)
     const stampDutyRaw = buyTurnover * 0.00003;
     const stampDuty = Math.round(stampDutyRaw);
 
@@ -53,22 +69,30 @@ export function calculateIntradayCharges(
     const totalChargesRaw = totalBrokerage + stt + exchangeTxn + stampDuty + sebiFees + gst;
     const totalCharges = parseFloat(totalChargesRaw.toFixed(2));
 
-    const grossPnlRaw = (sellPrice - buyPrice) * quantity;
-    const grossPnl = parseFloat(grossPnlRaw.toFixed(2));
+    // Calculate PnL based on Average Prices
+    const entryQty = entries.reduce((acc, e) => acc + (e.price > 0 ? e.quantity : 0), 0);
+    const exitQty = exits.reduce((acc, e) => acc + (e.price > 0 ? e.quantity : 0), 0);
+    const closedQty = Math.min(entryQty, exitQty);
 
-    const netPnlRaw = grossPnl - totalCharges;
-    const netPnl = parseFloat(netPnlRaw.toFixed(2));
+    let grossPnl = 0;
+    if (closedQty > 0) {
+        const avgEntry = entries.reduce((acc, e) => acc + (e.price * e.quantity), 0) / entryQty;
+        const avgExit = exits.reduce((acc, e) => acc + (e.price * e.quantity), 0) / exitQty;
+        grossPnl = type === "BUY" ? (avgExit - avgEntry) * closedQty : (avgEntry - avgExit) * closedQty;
+    }
+
+    const netPnl = grossPnl - totalCharges;
 
     return {
         turnover: parseFloat(totalTurnover.toFixed(2)),
-        grossPnl: grossPnl,
+        grossPnl: parseFloat(grossPnl.toFixed(2)),
         brokerage: totalBrokerage,
-        stt: stt,
-        exchangeTxn: exchangeTxn,
-        stampDuty: stampDuty,
-        sebiFees: sebiFees,
-        gst: gst,
-        totalCharges: totalCharges,
-        netPnl: netPnl
+        stt,
+        exchangeTxn,
+        stampDuty,
+        sebiFees,
+        gst,
+        totalCharges,
+        netPnl: parseFloat(netPnl.toFixed(2))
     };
 }

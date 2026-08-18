@@ -25,7 +25,7 @@ export default function AddTradePage() {
             </div>
 
             {/* The Form */}
-            <div className="p-4 max-w-lg mx-auto w-full">
+            <div className="p-4 max-w-lg mx-auto w-full bg-white dark:bg-black min-h-screen">
                 <TradeForm
                     onSuccess={() => {
                         // On mobile page, we want to go back to home after saving

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -8,8 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { createTrade, updateTrade } from "@/app/actions"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
-import { calculateIntradayCharges } from "@/lib/tax-calculator"
+import { Loader2, Plus, Trash2 } from "lucide-react"
+import { calculateIntradayCharges, Execution } from "@/lib/tax-calculator"
 
 export interface TradeData {
     id?: string
@@ -40,6 +40,11 @@ interface TradeFormProps {
 export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
     const [loading, setLoading] = useState(false)
     const [isQuickLogMode, setIsQuickLogMode] = useState(initialData?.isQuickLog || false)
+    const [isMultipleExecutions, setIsMultipleExecutions] = useState(false)
+
+    // Dynamic Execution States
+    const [entries, setEntries] = useState<Execution[]>([{ price: 0, quantity: 0 }])
+    const [exits, setExits] = useState<Execution[]>([{ price: 0, quantity: 0 }])
 
     const [formData, setFormData] = useState<TradeData>({
         symbol: initialData?.symbol || "",
@@ -59,38 +64,74 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
         quickPnl: initialData?.netPnl?.toString() || ""
     })
 
+    const addExecution = (type: "ENTRY" | "EXIT") => {
+        if (type === "ENTRY") setEntries([...entries, { price: 0, quantity: 0 }])
+        else setExits([...exits, { price: 0, quantity: 0 }])
+    }
+
+    const removeExecution = (type: "ENTRY" | "EXIT", index: number) => {
+        if (type === "ENTRY") setEntries(entries.filter((_, i) => i !== index))
+        else setExits(exits.filter((_, i) => i !== index))
+    }
+
+    const updateExecution = (type: "ENTRY" | "EXIT", index: number, field: keyof Execution, value: string) => {
+        const val = parseFloat(value) || 0
+        if (type === "ENTRY") {
+            const newEntries = [...entries]
+            newEntries[index][field] = val
+            setEntries(newEntries)
+        } else {
+            const newExits = [...exits]
+            newExits[index][field] = val
+            setExits(newExits)
+        }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
-        if (!formData.symbol) {
-            toast.warning("Please enter a Symbol (e.g., NIFTY)")
-            return
-        }
-        if (!formData.date) {
-            toast.warning("Please select a Date.")
-            return
-        }
+        if (!formData.symbol) return toast.warning("Please enter a Symbol (e.g., NIFTY)")
+        if (!formData.date) return toast.warning("Please select a Date.")
 
-        // Validation for Detailed Mode
+        let processedEntries: Execution[] = []
+        let processedExits: Execution[] = []
+        let finalAvgEntry = 0
+        let finalAvgExit = 0
+        let finalEntryQty = 0
+
         if (!isQuickLogMode) {
-            if (!formData.entryPrice) {
-                toast.warning("Entry Price is mandatory.")
-                return
+            if (isMultipleExecutions) {
+                processedEntries = entries.filter(e => e.price > 0 && e.quantity > 0)
+                processedExits = exits.filter(e => e.price > 0 && e.quantity > 0)
+
+                if (processedEntries.length === 0) return toast.warning("Valid entry details are required.")
+
+                finalEntryQty = processedEntries.reduce((acc, e) => acc + e.quantity, 0)
+                const totalExitQty = processedExits.reduce((acc, e) => acc + e.quantity, 0)
+
+                finalAvgEntry = processedEntries.reduce((acc, e) => acc + (e.price * e.quantity), 0) / finalEntryQty
+                finalAvgExit = totalExitQty > 0 ? processedExits.reduce((acc, e) => acc + (e.price * e.quantity), 0) / totalExitQty : 0
+
+            } else {
+                if (!formData.entryPrice) return toast.warning("Entry Price is mandatory.")
+                if (!formData.quantity) return toast.warning("Please enter the Quantity.")
+
+                const entryVal = parseFloat(formData.entryPrice)
+                const exitVal = formData.exitPrice ? parseFloat(formData.exitPrice) : 0
+                finalEntryQty = parseFloat(formData.quantity)
+
+                processedEntries = [{ price: entryVal, quantity: finalEntryQty }]
+                if (exitVal > 0) processedExits = [{ price: exitVal, quantity: finalEntryQty }]
+
+                finalAvgEntry = entryVal
+                finalAvgExit = exitVal
             }
-            if (!formData.quantity) {
-                toast.warning("Please enter the Quantity.")
-                return
-            }
+
             if (formData.category === "OPTIONS" && (!formData.strike || !formData.expiryDate)) {
-                toast.warning("Strike price and Expiry Date are mandatory for Options.")
-                return
+                return toast.warning("Strike price and Expiry Date are mandatory for Options.")
             }
-        } else {
-            // Validation for Quick Mode
-            if (!formData.quickPnl) {
-                toast.warning("Please enter Profit/Loss amount.")
-                return
-            }
+        } else if (!formData.quickPnl) {
+            return toast.warning("Please enter Profit/Loss amount.")
         }
 
         setLoading(true)
@@ -102,7 +143,7 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
                 const manualPnl = parseFloat(formData.quickPnl || "0")
                 payload = {
                     symbol: formData.symbol,
-                    category: formData.category, // Now uses the selected category
+                    category: formData.category,
                     type: formData.type,
                     entryPrice: 0,
                     exitPrice: 0,
@@ -116,21 +157,19 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
                     id: initialData?.id
                 }
             } else {
-                const entry = parseFloat(formData.entryPrice)
-                const exit = formData.exitPrice ? parseFloat(formData.exitPrice) : 0
-                const qty = parseFloat(formData.quantity)
-
-                const taxResult = calculateIntradayCharges(entry, exit, qty, formData.type)
+                const taxResult = calculateIntradayCharges(processedEntries, processedExits, formData.type)
 
                 payload = {
                     ...formData,
-                    exitPrice: formData.exitPrice ? parseFloat(formData.exitPrice) : null,
+                    entryPrice: finalAvgEntry,
+                    exitPrice: finalAvgExit > 0 ? finalAvgExit : null,
+                    quantity: finalEntryQty,
                     strike: formData.category === "OPTIONS" && formData.strike ? parseFloat(formData.strike) : null,
                     optionType: formData.category === "OPTIONS" ? formData.optionType : null,
                     expiryDate: formData.category === "OPTIONS" ? formData.expiryDate : null,
-                    exitDate: formData.category === "DELIVERY" && formData.exitPrice ? formData.exitDate : null,
+                    exitDate: formData.category === "DELIVERY" && finalAvgExit > 0 ? formData.exitDate : null,
                     fees: taxResult.totalCharges || 0,
-                    netPnl: formData.exitPrice ? taxResult.netPnl : 0,
+                    netPnl: finalAvgExit > 0 ? taxResult.netPnl : 0,
                     pnl: taxResult.grossPnl || 0,
                     id: initialData?.id
                 }
@@ -142,7 +181,7 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
             let result = initialData?.id ? await updateTrade(payload) : await createTrade(payload)
 
             if (result.success) {
-                if (isQuickLogMode || formData.exitPrice) {
+                if (isQuickLogMode || payload.exitPrice) {
                     const finalPnl = isQuickLogMode ? parseFloat(formData.quickPnl!) : payload.netPnl
                     const pnlFormatted = finalPnl.toFixed(2)
                     const pnlSign = finalPnl >= 0 ? "+" : ""
@@ -151,15 +190,17 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
                     toast.success(initialData ? "Trade Updated" : "Open Trade Logged!")
                 }
 
-                if (onSuccess) {
-                    onSuccess()
-                } else {
+                if (onSuccess) onSuccess()
+                else {
                     setFormData({
                         symbol: "", category: "INTRADAY", type: "BUY", optionType: "CE", strike: "", expiryDate: "", exitDate: "",
                         entryPrice: "", exitPrice: "", quantity: "", stopLoss: "", date: new Date().toISOString().split('T')[0], notes: "",
                         isQuickLog: false, quickPnl: ""
                     })
+                    setEntries([{ price: 0, quantity: 0 }])
+                    setExits([{ price: 0, quantity: 0 }])
                     setIsQuickLogMode(false)
+                    setIsMultipleExecutions(false)
                 }
             } else {
                 toast.error(result.error || "Failed to save trade")
@@ -177,36 +218,53 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
     }
 
     const labelClasses = "text-xs font-medium uppercase text-zinc-500 tracking-wider ml-1"
-    const inputClasses = "w-full h-12 bg-white dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 focus:border-green-500 focus:ring-green-500/20 rounded-xl transition-all"
+
+    // UPDATED: Forced dark:bg-black for all inputs
+    const inputClasses = "w-full h-12 bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 focus:border-green-500 focus:ring-green-500/20 rounded-xl transition-all"
 
     return (
         <form onSubmit={handleSubmit} className="space-y-5 py-4">
 
-            {/* QUICK LOG TOGGLE */}
-            <div className="flex items-center justify-between p-4 bg-muted/40 border border-border/50 rounded-xl mb-2">
-                <div className="flex flex-col">
-                    <span className="font-semibold text-sm">Quick Log</span>
-                    <span className="text-xs text-muted-foreground">Only enter symbol and P&L</span>
+            {/* TOGGLES */}
+            <div className="flex flex-col gap-3 p-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl mb-2">
+                <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                        <span className="font-semibold text-sm">Quick Log</span>
+                        <span className="text-xs text-muted-foreground">Only enter symbol and P&L</span>
+                    </div>
+                    <Switch
+                        checked={isQuickLogMode}
+                        onCheckedChange={(val) => {
+                            setIsQuickLogMode(val)
+                            if (val) setIsMultipleExecutions(false)
+                            setFormData(prev => ({ ...prev, isQuickLog: val }))
+                        }}
+                    />
                 </div>
-                <Switch
-                    checked={isQuickLogMode}
-                    onCheckedChange={(val) => {
-                        setIsQuickLogMode(val)
-                        setFormData(prev => ({ ...prev, isQuickLog: val }))
-                    }}
-                />
+                {!isQuickLogMode && (
+                    <div className="flex items-center justify-between border-t border-border/50 pt-3">
+                        <div className="flex flex-col">
+                            <span className="font-semibold text-sm">Multiple Executions</span>
+                            <span className="text-xs text-muted-foreground">Scale in/out with partial fills</span>
+                        </div>
+                        <Switch
+                            checked={isMultipleExecutions}
+                            onCheckedChange={setIsMultipleExecutions}
+                        />
+                    </div>
+                )}
             </div>
 
-            {/* CATEGORY SELECTOR (Now shows in both modes for new trades) */}
+            {/* CATEGORY SELECTOR */}
             {!initialData?.id && (
-                <div className="w-full flex bg-zinc-100 dark:bg-zinc-800/50 p-1 rounded-xl mb-2">
+                <div className="w-full flex bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-1 rounded-xl mb-2">
                     {(["INTRADAY", "OPTIONS", "DELIVERY"] as const).map((cat) => (
                         <button
                             key={cat}
                             type="button"
                             onClick={() => setFormData(prev => ({ ...prev, category: cat }))}
                             className={`flex-1 text-xs font-bold py-2.5 rounded-lg transition-all ${formData.category === cat
-                                ? 'bg-white dark:bg-zinc-700 shadow-sm text-foreground ring-1 ring-black/5 dark:ring-white/10'
+                                ? 'bg-white dark:bg-zinc-800 shadow-sm text-foreground ring-1 ring-black/5 dark:ring-white/10'
                                 : 'text-zinc-500 hover:text-foreground'
                                 }`}
                         >
@@ -290,27 +348,66 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
                         </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label className={labelClasses}>Entry Price</Label>
-                            <Input type="number" step="0.05" name="entryPrice" value={formData.entryPrice} onChange={handleChange} placeholder="0.00" className={inputClasses} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className={labelClasses}>Exit Price</Label>
-                            <Input type="number" step="0.05" name="exitPrice" value={formData.exitPrice} onChange={handleChange} placeholder="0.00" className={inputClasses} />
-                        </div>
-                    </div>
+                    {/* DYNAMIC EXECUTION UI OR SIMPLE UI */}
+                    {isMultipleExecutions ? (
+                        <div className="space-y-6 bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label className={labelClasses}>Quantity</Label>
-                            <Input type="number" name="quantity" value={formData.quantity} onChange={handleChange} className={inputClasses} placeholder="Qty" />
+                            {/* Entries Mapping */}
+                            <div className="space-y-3">
+                                <Label className="text-xs font-bold uppercase text-foreground">Entry Legs</Label>
+                                {entries.map((leg, index) => (
+                                    <div key={`entry-${index}`} className="flex gap-2 items-center">
+                                        <Input type="number" step="0.05" placeholder="Price" value={leg.price || ""} onChange={(e) => updateExecution("ENTRY", index, "price", e.target.value)} className={`h-10 ${inputClasses}`} />
+                                        <Input type="number" placeholder="Qty" value={leg.quantity || ""} onChange={(e) => updateExecution("ENTRY", index, "quantity", e.target.value)} className={`h-10 ${inputClasses}`} />
+                                        <Button type="button" variant="ghost" size="icon" onClick={() => removeExecution("ENTRY", index)} disabled={entries.length === 1} className="h-10 w-10 text-red-500 hover:bg-red-50 hover:text-red-600">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ))}
+                                <Button type="button" variant="outline" size="sm" onClick={() => addExecution("ENTRY")} className="w-full text-xs border-dashed">
+                                    <Plus className="h-3 w-3 mr-1" /> Add Partial Entry
+                                </Button>
+                            </div>
+
+                            <hr className="border-border/50" />
+
+                            {/* Exits Mapping */}
+                            <div className="space-y-3">
+                                <Label className="text-xs font-bold uppercase text-foreground">Exit Legs</Label>
+                                {exits.map((leg, index) => (
+                                    <div key={`exit-${index}`} className="flex gap-2 items-center">
+                                        <Input type="number" step="0.05" placeholder="Price" value={leg.price || ""} onChange={(e) => updateExecution("EXIT", index, "price", e.target.value)} className={`h-10 ${inputClasses}`} />
+                                        <Input type="number" placeholder="Qty" value={leg.quantity || ""} onChange={(e) => updateExecution("EXIT", index, "quantity", e.target.value)} className={`h-10 ${inputClasses}`} />
+                                        <Button type="button" variant="ghost" size="icon" onClick={() => removeExecution("EXIT", index)} disabled={exits.length === 1} className="h-10 w-10 text-red-500 hover:bg-red-50 hover:text-red-600">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ))}
+                                <Button type="button" variant="outline" size="sm" onClick={() => addExecution("EXIT")} className="w-full text-xs border-dashed">
+                                    <Plus className="h-3 w-3 mr-1" /> Add Partial Exit
+                                </Button>
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label className={labelClasses}>Stop Loss</Label>
-                            <Input type="number" step="0.05" name="stopLoss" value={formData.stopLoss} onChange={handleChange} className={inputClasses} placeholder="Optional" />
+                    ) : (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className={labelClasses}>Entry Price</Label>
+                                <Input type="number" step="0.05" name="entryPrice" value={formData.entryPrice} onChange={handleChange} placeholder="0.00" className={inputClasses} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className={labelClasses}>Exit Price</Label>
+                                <Input type="number" step="0.05" name="exitPrice" value={formData.exitPrice} onChange={handleChange} placeholder="0.00" className={inputClasses} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className={labelClasses}>Quantity</Label>
+                                <Input type="number" name="quantity" value={formData.quantity} onChange={handleChange} className={inputClasses} placeholder="Qty" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className={labelClasses}>Stop Loss</Label>
+                                <Input type="number" step="0.05" name="stopLoss" value={formData.stopLoss} onChange={handleChange} className={inputClasses} placeholder="Optional" />
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     <div className={formData.category === "DELIVERY" && formData.exitPrice ? "grid grid-cols-2 gap-4" : "space-y-2"}>
                         <div className="space-y-2">
@@ -335,7 +432,7 @@ export function TradeForm({ initialData, onSuccess }: TradeFormProps) {
                     name="notes"
                     value={formData.notes}
                     onChange={handleChange}
-                    className="w-full bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500/20 rounded-xl transition-all p-3 text-sm min-h-[80px] resize-none"
+                    className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500/20 rounded-xl transition-all p-3 text-sm min-h-[80px] resize-none"
                     placeholder="Why did you take this trade?"
                 />
             </div>
