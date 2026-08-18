@@ -128,7 +128,11 @@ function TradeForm({ setOpen, className, initialData }: { setOpen: (open: boolea
         const type = target.type.value || "BUY";
 
         // 2. Calculate the taxes (TypeScript now knows exactly what this returns)
-        const taxResult = calculateIntradayCharges(entry, exit || 0, qty, type as "BUY" | "SELL");
+        const taxResult = calculateIntradayCharges(
+            [{ price: entry, quantity: qty }],
+            [{ price: exit || 0, quantity: qty }],
+            type as "BUY" | "SELL"
+        );
 
         // Use ONLY the properties that exist in your TaxResult interface
         const calculatedFee = taxResult.totalCharges || 0;
