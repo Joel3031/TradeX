@@ -77,7 +77,11 @@ export function ImportTrades() {
 
                     // Only calculate if we have valid numbers
                     if (entryPrice && exitPrice && quantity) {
-                        const taxResult = calculateIntradayCharges(entryPrice, exitPrice, quantity, type as "BUY" | "SELL");
+                        const taxResult = calculateIntradayCharges(
+                            [{ price: entryPrice, quantity: quantity }], // Formatted as Execution array
+                            [{ price: exitPrice, quantity: quantity }],  // Formatted as Execution array
+                            type as "BUY" | "SELL"
+                        );
                         fees = taxResult.totalCharges;
                         netPnl = taxResult.netPnl;
                     }
