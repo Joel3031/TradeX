@@ -7,11 +7,12 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, Dr
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { createTrade, updateTrade, deleteTrade } from "@/app/actions"
 import { toast } from "sonner"
 import { Loader2, Plus, Trash2, AlertTriangle, ArrowLeft } from "lucide-react"
-import { calculateIntradayCharges } from "@/lib/tax-calculator"
+import { calculateIntradayCharges, Execution } from "@/lib/tax-calculator"
 
 interface TradeDialogProps {
     trigger?: React.ReactNode
@@ -30,12 +31,9 @@ export function TradeDialog({ trigger, tradeToEdit, open: controlledOpen, onOpen
 
     const DefaultTrigger = (
         <Button className="group flex items-center !p-0 h-10 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-md transition-all duration-300 ease-in-out overflow-hidden">
-            {/* Fixed-size container guarantees the icon is 100% centered when collapsed */}
             <div className="flex items-center justify-center w-10 h-10 shrink-0">
                 <Plus className="h-5 w-5" />
             </div>
-
-            {/* Text expands outward on hover */}
             <span className="max-w-0 opacity-0 overflow-hidden whitespace-nowrap transition-all duration-300 ease-in-out group-hover:max-w-[100px] group-hover:opacity-100 group-hover:pr-5 font-medium">
                 Add Trade
             </span>
@@ -102,76 +100,169 @@ function TradeForm({ setOpen, className, initialData }: { setOpen: (open: boolea
     const [isDeleting, setIsDeleting] = useState(false)
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
 
-    // State to handle conditional rendering
-    const [category, setCategory] = useState(initialData?.category || "INTRADAY")
-    const [hasExitPrice, setHasExitPrice] = useState(!!initialData?.exitPrice)
+    // Determine if the initial data was a Quick Log (0 qty and 0 entry price, but has PnL)
+    const isInitiallyQuickLog = initialData ? (initialData.quantity === 0 && initialData.entryPrice === 0 && initialData.netPnl !== undefined) : false
 
-    const defaultDate = initialData?.date
-        ? new Date(initialData.date).toISOString().split('T')[0]
-        : initialData?.entryDate
-            ? new Date(initialData.entryDate).toISOString().split('T')[0]
-            : new Date().toISOString().split('T')[0]
+    const [isQuickLogMode, setIsQuickLogMode] = useState(isInitiallyQuickLog || initialData?.isQuickLog || false)
+    const [isMultipleExecutions, setIsMultipleExecutions] = useState(false)
 
-    const defaultExpiry = initialData?.expiryDate ? new Date(initialData.expiryDate).toISOString().split('T')[0] : ""
-    const defaultExitDate = initialData?.exitDate ? new Date(initialData.exitDate).toISOString().split('T')[0] : ""
+    const [entries, setEntries] = useState<Execution[]>([{ price: initialData?.entryPrice || 0, quantity: initialData?.quantity || 0 }])
+    const [exits, setExits] = useState<Execution[]>([{ price: initialData?.exitPrice || 0, quantity: initialData?.quantity || 0 }])
+
+    const [formData, setFormData] = useState({
+        symbol: initialData?.symbol || "",
+        category: initialData?.category || "INTRADAY",
+        type: initialData?.type || "BUY",
+        optionType: initialData?.optionType || "CE",
+        strike: initialData?.strike || "",
+        expiryDate: initialData?.expiryDate ? new Date(initialData.expiryDate).toISOString().split('T')[0] : "",
+        exitDate: initialData?.exitDate ? new Date(initialData.exitDate).toISOString().split('T')[0] : "",
+        entryPrice: initialData?.entryPrice?.toString() || "",
+        exitPrice: initialData?.exitPrice?.toString() || "",
+        quantity: initialData?.quantity?.toString() || "",
+        stopLoss: initialData?.stopLoss?.toString() || "",
+        date: initialData?.date
+            ? new Date(initialData.date).toISOString().split('T')[0]
+            : initialData?.entryDate
+                ? new Date(initialData.entryDate).toISOString().split('T')[0]
+                : new Date().toISOString().split('T')[0],
+        notes: initialData?.notes || "",
+        quickPnl: initialData?.netPnl?.toString() || ""
+    })
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
+    }
+
+    const addExecution = (type: "ENTRY" | "EXIT") => {
+        if (type === "ENTRY") setEntries([...entries, { price: 0, quantity: 0 }])
+        else setExits([...exits, { price: 0, quantity: 0 }])
+    }
+
+    const removeExecution = (type: "ENTRY" | "EXIT", index: number) => {
+        if (type === "ENTRY") setEntries(entries.filter((_, i) => i !== index))
+        else setExits(exits.filter((_, i) => i !== index))
+    }
+
+    const updateExecution = (type: "ENTRY" | "EXIT", index: number, field: keyof Execution, value: string) => {
+        const val = parseFloat(value) || 0
+        if (type === "ENTRY") {
+            const newEntries = [...entries]
+            newEntries[index][field] = val
+            setEntries(newEntries)
+        } else {
+            const newExits = [...exits]
+            newExits[index][field] = val
+            setExits(newExits)
+        }
+    }
 
     async function onSubmit(event: React.SyntheticEvent) {
         event.preventDefault()
+
+        if (!formData.symbol) return toast.warning("Please enter a Symbol (e.g., NIFTY)")
+        if (!formData.date) return toast.warning("Please select a Date.")
+
+        let processedEntries: Execution[] = []
+        let processedExits: Execution[] = []
+        let finalAvgEntry = 0
+        let finalAvgExit = 0
+        let finalEntryQty = 0
+
+        if (!isQuickLogMode) {
+            if (isMultipleExecutions) {
+                processedEntries = entries.filter(e => e.price > 0 && e.quantity > 0)
+                processedExits = exits.filter(e => e.price > 0 && e.quantity > 0)
+
+                if (processedEntries.length === 0) return toast.warning("Valid entry details are required.")
+
+                finalEntryQty = processedEntries.reduce((acc, e) => acc + e.quantity, 0)
+                const totalExitQty = processedExits.reduce((acc, e) => acc + e.quantity, 0)
+
+                finalAvgEntry = processedEntries.reduce((acc, e) => acc + (e.price * e.quantity), 0) / finalEntryQty
+                finalAvgExit = totalExitQty > 0 ? processedExits.reduce((acc, e) => acc + (e.price * e.quantity), 0) / totalExitQty : 0
+            } else {
+                const entryVal = parseFloat(formData.entryPrice) || 0
+                const exitVal = parseFloat(formData.exitPrice) || 0
+                finalEntryQty = parseFloat(formData.quantity) || 0
+
+                if (!entryVal) return toast.warning("Entry Price is mandatory.")
+                if (!finalEntryQty) return toast.warning("Please enter the Quantity.")
+
+                processedEntries = [{ price: entryVal, quantity: finalEntryQty }]
+                if (exitVal > 0) processedExits = [{ price: exitVal, quantity: finalEntryQty }]
+
+                finalAvgEntry = entryVal
+                finalAvgExit = exitVal
+            }
+
+            if (formData.category === "OPTIONS" && (!formData.strike || !formData.expiryDate)) {
+                return toast.warning("Strike price and Expiry Date are mandatory for Options.")
+            }
+        } else if (!formData.quickPnl) {
+            return toast.warning("Please enter Profit/Loss amount.")
+        }
+
         setIsLoading(true)
 
-        const target = event.target as typeof event.target & Record<string, { value: string }>
+        try {
+            let payload: any = {}
 
-        // 1. Safely parse numbers
-        const entry = parseFloat(target.entryPrice.value.replace(/,/g, '')) || 0;
-        const exit = target.exitPrice?.value ? parseFloat(target.exitPrice.value.replace(/,/g, '')) : null;
-        const qty = Math.abs(parseFloat(target.quantity.value.replace(/,/g, ''))) || 0;
-        const type = target.type.value || "BUY";
+            if (isQuickLogMode) {
+                const manualPnl = parseFloat(formData.quickPnl || "0")
+                payload = {
+                    symbol: formData.symbol,
+                    category: formData.category,
+                    type: formData.type,
+                    entryPrice: 0,
+                    exitPrice: 0,
+                    quantity: 0,
+                    stopLoss: null,
+                    date: formData.date,
+                    notes: formData.notes || "Quick Logged Trade",
+                    fees: 0,
+                    netPnl: manualPnl,
+                    pnl: manualPnl,
+                    id: initialData?.id
+                }
+            } else {
+                const taxResult = calculateIntradayCharges(processedEntries, processedExits, formData.type as "BUY" | "SELL")
 
-        // 2. Calculate the taxes (TypeScript now knows exactly what this returns)
-        const taxResult = calculateIntradayCharges(
-            [{ price: entry, quantity: qty }],
-            [{ price: exit || 0, quantity: qty }],
-            type as "BUY" | "SELL"
-        );
+                payload = {
+                    symbol: formData.symbol,
+                    category: formData.category,
+                    type: formData.type,
+                    entryPrice: finalAvgEntry,
+                    exitPrice: finalAvgExit > 0 ? finalAvgExit : null,
+                    quantity: finalEntryQty,
+                    stopLoss: formData.stopLoss ? parseFloat(formData.stopLoss) : null,
+                    date: formData.date,
+                    strike: formData.category === "OPTIONS" && formData.strike ? parseFloat(formData.strike) : null,
+                    optionType: formData.category === "OPTIONS" ? formData.optionType : null,
+                    expiryDate: formData.category === "OPTIONS" ? formData.expiryDate : null,
+                    exitDate: formData.category === "DELIVERY" && finalAvgExit > 0 ? formData.exitDate : null,
+                    fees: taxResult.totalCharges || 0,
+                    netPnl: finalAvgExit > 0 ? taxResult.netPnl : 0,
+                    pnl: taxResult.grossPnl || 0,
+                    notes: formData.notes || null,
+                    id: initialData?.id
+                }
+            }
 
-        // Use ONLY the properties that exist in your TaxResult interface
-        const calculatedFee = taxResult.totalCharges || 0;
-        const calculatedNetPnl = taxResult.netPnl || 0;
+            let result = initialData?.id ? await updateTrade(payload) : await createTrade(payload)
 
-        // 3. Build the payload with the new fields
-        const formData = {
-            symbol: target.symbol.value,
-            category: category,
-            type: type,
-            entryPrice: entry,
-            exitPrice: exit,
-            quantity: qty,
-            stopLoss: target.stopLoss.value ? parseFloat(target.stopLoss.value.replace(/,/g, '')) : 0,
-            date: target.date.value,
-            // Pass the safely extracted number to the fees property
-            fees: calculatedFee,
-            netPnl: exit !== null ? calculatedNetPnl : 0,
-            // ... (rest of your fields)
-
-            // New Fields mapped conditionally
-            optionType: category === "OPTIONS" ? target.optionType?.value : null,
-            strike: category === "OPTIONS" && target.strike?.value ? parseFloat(target.strike.value) : null,
-            expiryDate: category === "OPTIONS" ? target.expiryDate?.value : null,
-            exitDate: category === "DELIVERY" && exit !== null ? target.exitDate?.value : null,
-            notes: target.notes?.value || null,
-
-            id: initialData?.id
+            if (result.success) {
+                toast.success(initialData ? "Trade updated" : "Trade logged")
+                setOpen(false)
+            } else {
+                toast.error(result.error || "Operation failed")
+            }
+        } catch (error) {
+            console.error(error)
+            toast.error("An error occurred")
+        } finally {
+            setIsLoading(false)
         }
-
-        let result = initialData?.id ? await updateTrade(formData) : await createTrade(formData)
-
-        if (result.success) {
-            toast.success(initialData ? "Trade updated" : "Trade logged")
-            setOpen(false)
-        } else {
-            toast.error(result.error || "Operation failed")
-        }
-        setIsLoading(false)
     }
 
     async function confirmDelete() {
@@ -205,18 +296,52 @@ function TradeForm({ setOpen, className, initialData }: { setOpen: (open: boolea
         )
     }
 
+    const inputClasses = "w-full h-10 bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 focus:border-green-500 focus:ring-green-500/20 rounded-md transition-all"
+
     return (
         <form onSubmit={onSubmit} className={`flex flex-col gap-4 md:grid md:grid-cols-2 items-start ${className}`}>
 
-            {/* CONDITIONAL UI: Category Selector (Only show for new trades) */}
+            {/* TOGGLES */}
+            <div className="flex flex-col gap-3 p-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl mb-2 md:col-span-2">
+                <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                        <span className="font-semibold text-sm">Quick Log</span>
+                        <span className="text-xs text-muted-foreground">Only enter symbol and P&L</span>
+                    </div>
+                    <Switch
+                        checked={isQuickLogMode}
+                        onCheckedChange={(val) => {
+                            setIsQuickLogMode(val)
+                            if (val) setIsMultipleExecutions(false)
+                        }}
+                    />
+                </div>
+                {!isQuickLogMode && (
+                    <div className="flex items-center justify-between border-t border-border/50 pt-3">
+                        <div className="flex flex-col">
+                            <span className="font-semibold text-sm">Multiple Executions</span>
+                            <span className="text-xs text-muted-foreground">Scale in/out with partial fills</span>
+                        </div>
+                        <Switch
+                            checked={isMultipleExecutions}
+                            onCheckedChange={setIsMultipleExecutions}
+                        />
+                    </div>
+                )}
+            </div>
+
+            {/* CATEGORY SELECTOR */}
             {!initialData?.id && (
-                <div className="w-full grid gap-2 md:col-span-2 mb-2 bg-muted/40 p-1 rounded-lg border border-border/50 flex flex-row">
+                <div className="w-full flex bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-1 rounded-xl mb-2 md:col-span-2">
                     {(["INTRADAY", "OPTIONS", "DELIVERY"] as const).map((cat) => (
                         <button
                             key={cat}
                             type="button"
-                            onClick={() => setCategory(cat)}
-                            className={`flex-1 text-xs md:text-sm font-medium py-2 rounded-md transition-all ${category === cat ? 'bg-background shadow-sm ring-1 ring-border text-foreground font-bold' : 'text-muted-foreground hover:text-foreground'}`}
+                            onClick={() => setFormData(prev => ({ ...prev, category: cat }))}
+                            className={`flex-1 text-xs font-bold py-2 rounded-lg transition-all ${formData.category === cat
+                                ? 'bg-white dark:bg-zinc-800 shadow-sm text-foreground ring-1 ring-black/5 dark:ring-white/10'
+                                : 'text-zinc-500 hover:text-foreground'
+                                }`}
                         >
                             {cat}
                         </button>
@@ -225,14 +350,14 @@ function TradeForm({ setOpen, className, initialData }: { setOpen: (open: boolea
             )}
 
             <div className="w-full grid gap-2">
-                <Label htmlFor="symbol">Symbol</Label>
-                <Input id="symbol" name="symbol" placeholder="e.g. NIFTY" required autoFocus defaultValue={initialData?.symbol} />
+                <Label>Symbol</Label>
+                <Input name="symbol" value={formData.symbol} onChange={handleChange} className={`${inputClasses} uppercase font-semibold`} placeholder="e.g. NIFTY" required autoFocus />
             </div>
 
             <div className="w-full grid gap-2">
-                <Label htmlFor="type">Type</Label>
-                <Select name="type" defaultValue={initialData?.type || "BUY"}>
-                    <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                <Label>Type</Label>
+                <Select value={formData.type} onValueChange={(val: any) => setFormData(prev => ({ ...prev, type: val }))}>
+                    <SelectTrigger className={inputClasses}><SelectValue /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="BUY">BUY (Long)</SelectItem>
                         <SelectItem value="SELL">SELL (Short)</SelectItem>
@@ -240,79 +365,135 @@ function TradeForm({ setOpen, className, initialData }: { setOpen: (open: boolea
                 </Select>
             </div>
 
-            {/* CONDITIONAL: Options Fields */}
-            {category === "OPTIONS" && (
+            {isQuickLogMode ? (
                 <>
-                    <div className="w-full grid gap-2">
-                        <Label htmlFor="optionType">Option Type</Label>
-                        <Select name="optionType" defaultValue={initialData?.optionType || "CE"}>
-                            <SelectTrigger><SelectValue placeholder="CE / PE" /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="CE">CE (Call)</SelectItem>
-                                <SelectItem value="PE">PE (Put)</SelectItem>
-                            </SelectContent>
-                        </Select>
+                    <div className="w-full grid gap-2 md:col-span-1">
+                        <Label>Net P&L (₹)</Label>
+                        <Input
+                            type="number"
+                            step="0.05"
+                            name="quickPnl"
+                            value={formData.quickPnl}
+                            onChange={handleChange}
+                            placeholder="-1500 or 2000"
+                            className={`${inputClasses} ${Number(formData.quickPnl) > 0 ? 'text-green-500' : Number(formData.quickPnl) < 0 ? 'text-red-500' : ''}`}
+                        />
                     </div>
-                    <div className="w-full grid gap-2">
-                        <Label htmlFor="strike">Strike Price</Label>
-                        <Input id="strike" name="strike" type="number" step="0.05" placeholder="e.g. 22000" defaultValue={initialData?.strike} required />
+                    <div className="w-full grid gap-2 md:col-span-1">
+                        <Label>Date</Label>
+                        <Input type="date" name="date" value={formData.date} onChange={handleChange} className={inputClasses} />
                     </div>
-                    <div className="w-full grid gap-2 md:col-span-2">
-                        <Label htmlFor="expiryDate">Expiry Date</Label>
-                        <Input id="expiryDate" name="expiryDate" type="date" defaultValue={defaultExpiry} required />
+                </>
+            ) : (
+                <>
+                    {/* CONDITIONAL: Options Fields */}
+                    {formData.category === "OPTIONS" && (
+                        <>
+                            <div className="w-full grid gap-2 md:col-span-2">
+                                <Label>Option Type</Label>
+                                <Select value={formData.optionType} onValueChange={(val: any) => setFormData(prev => ({ ...prev, optionType: val }))}>
+                                    <SelectTrigger className={inputClasses}><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="CE">CE (Call)</SelectItem>
+                                        <SelectItem value="PE">PE (Put)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="w-full grid gap-2">
+                                <Label>Strike Price</Label>
+                                <Input name="strike" type="number" step="0.05" value={formData.strike} onChange={handleChange} className={inputClasses} placeholder="e.g. 22000" />
+                            </div>
+                            <div className="w-full grid gap-2">
+                                <Label>Expiry Date</Label>
+                                <Input name="expiryDate" type="date" value={formData.expiryDate} onChange={handleChange} className={inputClasses} />
+                            </div>
+                        </>
+                    )}
+
+                    {/* DYNAMIC EXECUTION UI OR SIMPLE UI */}
+                    {isMultipleExecutions ? (
+                        <div className="space-y-4 bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 md:col-span-2 mt-2">
+                            {/* Entries */}
+                            <div className="space-y-3">
+                                <Label className="text-xs font-bold uppercase text-foreground">Entry Legs</Label>
+                                {entries.map((leg, index) => (
+                                    <div key={`entry-${index}`} className="flex gap-2 items-center">
+                                        <Input type="number" step="0.05" placeholder="Price" value={leg.price || ""} onChange={(e) => updateExecution("ENTRY", index, "price", e.target.value)} className={inputClasses} />
+                                        <Input type="number" placeholder="Qty" value={leg.quantity || ""} onChange={(e) => updateExecution("ENTRY", index, "quantity", e.target.value)} className={inputClasses} />
+                                        <Button type="button" variant="ghost" size="icon" onClick={() => removeExecution("ENTRY", index)} disabled={entries.length === 1} className="h-10 w-10 text-red-500 hover:bg-red-50 hover:text-red-600">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ))}
+                                <Button type="button" variant="outline" size="sm" onClick={() => addExecution("ENTRY")} className="w-full text-xs border-dashed">
+                                    <Plus className="h-3 w-3 mr-1" /> Add Partial Entry
+                                </Button>
+                            </div>
+
+                            <hr className="border-border/50" />
+
+                            {/* Exits */}
+                            <div className="space-y-3">
+                                <Label className="text-xs font-bold uppercase text-foreground">Exit Legs</Label>
+                                {exits.map((leg, index) => (
+                                    <div key={`exit-${index}`} className="flex gap-2 items-center">
+                                        <Input type="number" step="0.05" placeholder="Price" value={leg.price || ""} onChange={(e) => updateExecution("EXIT", index, "price", e.target.value)} className={inputClasses} />
+                                        <Input type="number" placeholder="Qty" value={leg.quantity || ""} onChange={(e) => updateExecution("EXIT", index, "quantity", e.target.value)} className={inputClasses} />
+                                        <Button type="button" variant="ghost" size="icon" onClick={() => removeExecution("EXIT", index)} disabled={exits.length === 1} className="h-10 w-10 text-red-500 hover:bg-red-50 hover:text-red-600">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ))}
+                                <Button type="button" variant="outline" size="sm" onClick={() => addExecution("EXIT")} className="w-full text-xs border-dashed">
+                                    <Plus className="h-3 w-3 mr-1" /> Add Partial Exit
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="w-full grid gap-2">
+                                <Label>Entry Price</Label>
+                                <Input name="entryPrice" type="number" step="0.05" value={formData.entryPrice} onChange={handleChange} className={inputClasses} placeholder="0.00" />
+                            </div>
+                            <div className="w-full grid gap-2">
+                                <Label>Exit Price</Label>
+                                <Input name="exitPrice" type="number" step="0.05" value={formData.exitPrice} onChange={handleChange} className={inputClasses} placeholder="Target hit?" />
+                            </div>
+                            <div className="w-full grid gap-2">
+                                <Label>Quantity</Label>
+                                <Input name="quantity" type="number" value={formData.quantity} onChange={handleChange} className={inputClasses} placeholder="0" />
+                            </div>
+                            <div className="w-full grid gap-2">
+                                <Label>Stop Loss</Label>
+                                <Input name="stopLoss" type="number" step="0.05" value={formData.stopLoss} onChange={handleChange} className={inputClasses} placeholder="Optional" />
+                            </div>
+                        </>
+                    )}
+
+                    <div className={formData.category === "DELIVERY" && formData.exitPrice ? "w-full grid gap-2" : "w-full grid gap-2 md:col-span-2"}>
+                        <Label>{formData.category === "DELIVERY" ? "Entry Date" : "Date"}</Label>
+                        <Input name="date" type="date" value={formData.date} onChange={handleChange} className={inputClasses} />
                     </div>
+
+                    {/* CONDITIONAL: Delivery Exit Date */}
+                    {formData.category === "DELIVERY" && formData.exitPrice && (
+                        <div className="w-full grid gap-2">
+                            <Label>Exit Date</Label>
+                            <Input name="exitDate" type="date" value={formData.exitDate} onChange={handleChange} className={inputClasses} />
+                        </div>
+                    )}
                 </>
             )}
 
-            <div className="w-full grid gap-2">
-                <Label htmlFor="entryPrice">Entry Price</Label>
-                <Input id="entryPrice" name="entryPrice" type="number" step="0.05" placeholder="0.00" required defaultValue={initialData?.entryPrice} />
-            </div>
-            <div className="w-full grid gap-2">
-                <Label htmlFor="quantity">Quantity</Label>
-                <Input id="quantity" name="quantity" type="number" placeholder="0" required defaultValue={initialData?.quantity} />
-            </div>
-
-            <div className="w-full grid gap-2">
-                <Label htmlFor="stopLoss">Stop Loss</Label>
-                <Input id="stopLoss" name="stopLoss" type="number" step="0.05" placeholder="Optional" defaultValue={initialData?.stopLoss} />
-            </div>
-            <div className="w-full grid gap-2">
-                <Label htmlFor="exitPrice">Exit Price</Label>
-                <Input
-                    id="exitPrice"
-                    name="exitPrice"
-                    type="number"
-                    step="0.05"
-                    placeholder="Target hit?"
-                    defaultValue={initialData?.exitPrice}
-                    onChange={(e) => setHasExitPrice(!!e.target.value)}
-                />
-            </div>
-
-            <div className={category === "DELIVERY" && hasExitPrice ? "w-full grid gap-2" : "w-full grid gap-2 md:col-span-2"}>
-                <Label htmlFor="date">{category === "DELIVERY" ? "Entry Date" : "Date"}</Label>
-                <Input id="date" name="date" type="date" defaultValue={defaultDate} required />
-            </div>
-
-            {/* CONDITIONAL: Delivery Exit Date */}
-            {category === "DELIVERY" && hasExitPrice && (
-                <div className="w-full grid gap-2">
-                    <Label htmlFor="exitDate">Exit Date</Label>
-                    <Input id="exitDate" name="exitDate" type="date" defaultValue={defaultExitDate} required />
-                </div>
-            )}
-
-            {/* NEW: Notes Field */}
             <div className="w-full grid gap-2 md:col-span-2">
-                <Label htmlFor="notes">Notes & Strategy</Label>
+                <Label>Notes & Strategy</Label>
                 <textarea
-                    id="notes"
                     name="notes"
                     rows={2}
-                    className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                    value={formData.notes}
+                    onChange={handleChange}
+                    className="flex min-h-[60px] w-full bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-md px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-50 resize-none transition-all"
                     placeholder="Why did you take this trade?"
-                    defaultValue={initialData?.notes}
                 />
             </div>
 
