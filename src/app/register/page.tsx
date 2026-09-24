@@ -118,7 +118,7 @@ export default function RegisterPage() {
 
     const onGoogleLogin = async () => {
         setIsGoogleLoading(true)
-        await signIn("google", { callbackUrl: "/" })
+        await signIn("google", { callbackUrl: "/app" })
     }
 
     return (

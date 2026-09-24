@@ -37,14 +37,14 @@ export default function LoginPage() {
         } else {
             toast.success("Welcome back!")
             router.refresh()
-            router.push("/")
+            router.push("/app")
         }
     }
 
     async function onGoogleLogin() {
         setIsGoogleLoading(true)
         try {
-            await signIn("google", { callbackUrl: "/" })
+            await signIn("google", { callbackUrl: "/app" })
         } catch (error) {
             toast.error("Something went wrong with Google Login")
         } finally {
